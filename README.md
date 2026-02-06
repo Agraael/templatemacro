@@ -1,6 +1,13 @@
-Interested in following along with development of any of my modules? Join the [Discord server](https://discord.gg/QAG8eWABGT). 
-
 # Template Macro
+
+## Installation
+
+Install via manifest URL:
+```
+https://github.com/Agraael/templatemacro/releases/latest/download/module.json
+```
+
+## Description
 You can use this module to trigger macros on certain events related to Measured Templates. The events include:
 - when a template is created ("whenCreated"), deleted ("whenDeleted"), moved ("whenMoved"), hidden ("whenHidden"), or revealed ("whenRevealed").
 - when a token enters the area of a template ("whenEntered"), leaves the area ("whenLeaving"), or moves within the area ("whenStaying").
@@ -17,5 +24,9 @@ The module contains some functions found in `game.modules.get("templatemacro").a
 - `findContainers(tokenDoc)` returns the MeasuredTemplateDocument ids that contain a TokenDocument.
 - `findContained(templateDoc)` returns the TokenDocument ids that are contained within a MeasuredTemplateDocument.
 - `findGrids(A, B, templateDoc)` returns the grid cells between the two coordinates that are within a MeasuredTemplateDocument.
+- `placeZone(options, hooks)` places a template zone with custom hooks.
+- `placeZoneWithStatusEffect(options, statusEffects, hooks)` places a zone that applies/removes status effects on enter/leave.
+- `placeDangerousZone(options, damageType, damageValue, hooks)` places a zone triggering ENG check + damage on failure (Lancer).
+- `triggerDangerousZoneFlow(token, damageType, damageValue)` manually triggers the dangerous zone ENG check flow.
 
 Additionally, the `MeasuredTemplateDocument` now has the function `callMacro(type="never", options={})`, which executes the appropriate embedded script, if it exists. The types are: "whenCreated", "whenDeleted", "whenMoved", "whenHidden", "whenRevealed", "whenEntered", "whenLeft", "whenThrough", "whenStaying", "whenTurnStart", "whenTurnEnd", "never", the last being a placeholder script meant for manual execution only.
