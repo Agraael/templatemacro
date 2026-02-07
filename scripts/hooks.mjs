@@ -1,6 +1,15 @@
-import {findContainers, findGrids} from "./api.mjs";
-import {MODULE} from "./constants.mjs";
-import {_getFirstOwnerId, callMacro, renderTemplateMacroConfig} from "./templatemacro.mjs";
+import {
+  findContainers,
+  findGrids
+} from "./api.mjs";
+import {
+  MODULE
+} from "./constants.mjs";
+import {
+  _getFirstOwnerId,
+  callMacro,
+  renderTemplateMacroConfig
+} from "./templatemacro.mjs";
 
 // Create a button in a template's header.
 export function _createHeaderButton(config, buttons) {
@@ -15,7 +24,10 @@ export function _createHeaderButton(config, buttons) {
 // save previous state of templates containing tokenDoc.
 export function _preUpdateToken(tokenDoc, update, context, userId) {
   foundry.utils.setProperty(context, `${MODULE}.wasIn`, findContainers(tokenDoc));
-  const coords = {x: tokenDoc.x, y: tokenDoc.y};
+  const coords = {
+    x: tokenDoc.x,
+    y: tokenDoc.y
+  };
   foundry.utils.setProperty(context, `${MODULE}.coords.previous`, coords);
 }
 
@@ -26,10 +38,15 @@ export async function _updateToken(tokenDoc, update, context, userId) {
   if (!hasX && !hasY) return;
 
   await CanvasAnimation.getAnimation(tokenDoc.object.animationName)?.promise;
-  const coords = {x: tokenDoc.x, y: tokenDoc.y};
+  const coords = {
+    x: tokenDoc.x,
+    y: tokenDoc.y
+  };
   const previousCoords = foundry.utils.getProperty(context, `${MODULE}.coords.previous`);
 
-  const {id: gmId} = game.users.find(user => {
+  const {
+    id: gmId
+  } = game.users.find(user => {
     return user.active && user.isGM;
   }) ?? {};
   // those you are in now and were in before (and might still be in).
@@ -43,7 +60,10 @@ export async function _updateToken(tokenDoc, update, context, userId) {
   const through = tokenDoc.parent.templates.reduce((acc, templateDoc) => {
     const cells = findGrids(previousCoords, coords, templateDoc);
     if (!cells.length) return acc;
-    acc.push({templateId: templateDoc.id, cells});
+    acc.push({
+      templateId: templateDoc.id,
+      cells
+    });
     return acc;
   }, []);
   foundry.utils.setProperty(context, `${MODULE}.through`, through);
@@ -55,7 +75,10 @@ export async function _updateToken(tokenDoc, update, context, userId) {
 
   const tokenId = tokenDoc.id;
   const macroContext = {
-    gmId, userId, tokenId, coords: {
+    gmId,
+    userId,
+    tokenId,
+    coords: {
       previous: foundry.utils.deepClone(previousCoords),
       current: coords
     },
@@ -67,7 +90,9 @@ export async function _updateToken(tokenDoc, update, context, userId) {
     const templateDoc = tokenDoc.parent.templates.get(id);
     if (templateDoc) callMacro(templateDoc, trigger, macroContext);
   }
-  enteredAndLeft.forEach(({templateId}) => call(templateId, "whenThrough"));
+  enteredAndLeft.forEach(({
+    templateId
+  }) => call(templateId, "whenThrough"));
   leaving.forEach(templateId => call(templateId, "whenLeft"));
   entering.forEach(templateId => call(templateId, "whenEntered"));
   staying.forEach(templateId => call(templateId, "whenStaying"));
@@ -78,33 +103,62 @@ export function _preCreateTemplate(templateDoc, templateData, context, userId) {
   const item = fromUuidSync(templateDoc.flags.dnd5e?.origin || "");
   if (!item) return;
   const flagData = item.flags[MODULE] ?? {};
-  templateDoc.updateSource({[`flags.${MODULE}`]: flagData});
+  templateDoc.updateSource({
+    [`flags.${MODULE}`]: flagData
+  });
 }
 
 // call whenCreated macros.
 export function _createTemplate(templateDoc, context, userId) {
-  const {id: gmId} = game.users.find(user => {
+  const {
+    id: gmId
+  } = game.users.find(user => {
     return user.active && user.isGM;
   }) ?? {};
-  const current = {x: templateDoc.x, y: templateDoc.y};
-  const macroContext = {gmId, userId, coords: {previous: null, current}};
+  const current = {
+    x: templateDoc.x,
+    y: templateDoc.y
+  };
+  const macroContext = {
+    gmId,
+    userId,
+    coords: {
+      previous: null,
+      current
+    }
+  };
   callMacro(templateDoc, "whenCreated", macroContext);
 }
 
 // call whenDeleted macros.
 export function _deleteTemplate(templateDoc, context, userId) {
-  const {id: gmId} = game.users.find(user => {
+  const {
+    id: gmId
+  } = game.users.find(user => {
     return user.active && user.isGM;
   }) ?? {};
-  const current = {x: templateDoc.x, y: templateDoc.y};
-  const macroContext = {gmId, userId, coords: {previous: null, current}};
+  const current = {
+    x: templateDoc.x,
+    y: templateDoc.y
+  };
+  const macroContext = {
+    gmId,
+    userId,
+    coords: {
+      previous: null,
+      current
+    }
+  };
   callMacro(templateDoc, "whenDeleted", macroContext);
 }
 
 // when hidden/revealed or moved.
 export function _preUpdateTemplate(templateDoc, update, context, userId) {
   foundry.utils.setProperty(context, `${MODULE}.wasHidden`, templateDoc.hidden);
-  const coords = {x: templateDoc.x, y: templateDoc.y};
+  const coords = {
+    x: templateDoc.x,
+    y: templateDoc.y
+  };
   foundry.utils.setProperty(context, `${MODULE}.coords.previous`, coords);
 
 }
@@ -116,15 +170,27 @@ export function _updateTemplate(templateDoc, update, context, userId) {
 
   // has been moved?
   const previous = foundry.utils.getProperty(context, `${MODULE}.coords.previous`);
-  const current = {x: templateDoc.x, y: templateDoc.y};
+  const current = {
+    x: templateDoc.x,
+    y: templateDoc.y
+  };
   const hasX = foundry.utils.hasProperty(update, "x");
   const hasY = foundry.utils.hasProperty(update, "y");
   const moved = hasX || hasY;
 
-  const {id: gmId} = game.users.find(user => {
+  const {
+    id: gmId
+  } = game.users.find(user => {
     return user.active && user.isGM;
   }) ?? {};
-  const macroContext = {gmId, userId, coords: {previous, current}};
+  const macroContext = {
+    gmId,
+    userId,
+    coords: {
+      previous,
+      current
+    }
+  };
   if (hide) callMacro(templateDoc, "whenHidden", macroContext);
   if (show) callMacro(templateDoc, "whenRevealed", macroContext);
   if (moved) callMacro(templateDoc, "whenMoved", macroContext);
@@ -133,7 +199,9 @@ export function _updateTemplate(templateDoc, update, context, userId) {
 // When starting or ending a turn.
 export function _preUpdateCombat(combat, update, context, userId) {
   const was = combat.started;
-  context[MODULE] = {was};
+  context[MODULE] = {
+    was
+  };
 }
 export function _updateCombat(combat, update, context, userId) {
   if ((context.direction === -1) || !combat.isActive) return;
@@ -142,13 +210,31 @@ export function _updateCombat(combat, update, context, userId) {
   const curr = canvas.scene.tokens.get(combat.current?.tokenId);
 
   const coords = {};
-  if (prev) coords.previous = {x: prev.x, y: prev.y, tokenId: prev.id};
-  if (curr) coords.current = {x: curr.x, y: curr.y, tokenId: curr.id};
+  if (prev) coords.previous = {
+    x: prev.x,
+    y: prev.y,
+    tokenId: prev.id
+  };
+  if (curr) coords.current = {
+    x: curr.x,
+    y: curr.y,
+    tokenId: curr.id
+  };
 
-  const {id: gmId} = game.users.find(u => u.active && u.isGM) ?? {};
+  const {
+    id: gmId
+  } = game.users.find(u => u.active && u.isGM) ?? {};
   const macroContext = {};
-  if (prev) macroContext.prev = {gmId, userId: _getFirstOwnerId(prev), tokenId: prev.id};
-  if (curr) macroContext.curr = {gmId, userId: _getFirstOwnerId(curr), tokenId: curr.id};
+  if (prev) macroContext.prev = {
+    gmId,
+    userId: _getFirstOwnerId(prev),
+    tokenId: prev.id
+  };
+  if (curr) macroContext.curr = {
+    gmId,
+    userId: _getFirstOwnerId(curr),
+    tokenId: curr.id
+  };
 
   // get containing templates.
   const containers = {};

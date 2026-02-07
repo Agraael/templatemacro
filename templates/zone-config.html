@@ -1,0 +1,156 @@
+<form autocomplete="off">
+    <nav class="sheet-tabs tabs" data-group="primary">
+        <a class="item" data-tab="dangerous">Dangerous Zone</a>
+        <a class="item" data-tab="status">Status Zone</a>
+    </nav>
+
+    <section class="content">
+        <!-- Dangerous Zone Tab -->
+        <div class="tab" data-tab="dangerous" data-group="primary">
+            <div class="form-group">
+                <label>Default Fill Type</label>
+                <select name="dangerZoneDefaultFillType" data-dtype="Number">
+                    {{selectOptions fillTypes selected=dangerous.fillType}}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Default Texture</label>
+                <div class="form-fields">
+                    <input type="text" name="dangerZoneDefaultTexture" value="{{dangerous.texture}}">
+                    {{filePicker target="dangerZoneDefaultTexture" type="imagevideo"}}
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Default Fill Color</label>
+                <div class="form-fields">
+                    <input type="color" name="dangerZoneDefaultFillColor" value="{{dangerous.fillColor}}">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Default Fill Opacity</label>
+                <div class="form-fields">
+                    <input type="range" name="dangerZoneDefaultFillOpacity" value="{{dangerous.fillOpacity}}" min="0"
+                        max="1" step="0.05">
+                    <span class="range-value">{{dangerous.fillOpacity}}</span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Default Border Opacity</label>
+                <div class="form-fields">
+                    <input type="range" name="dangerZoneDefaultBorderOpacity" value="{{dangerous.borderOpacity}}"
+                        min="0" max="1" step="0.05">
+                    <span class="range-value">{{dangerous.borderOpacity}}</span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Fill Animation Enabled</label>
+                <input type="checkbox" name="dangerZoneDefaultAnimation" {{checked dangerous.animation}}>
+            </div>
+            <div class="form-group">
+                <label>Animation Speed</label>
+                <div class="form-fields">
+                    <input type="range" name="dangerZoneDefaultFillAnimationSpeed" value="{{dangerous.animationSpeed}}"
+                        min="0.1" max="3" step="0.1">
+                    <span class="range-value">{{dangerous.animationSpeed}}</span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Animation Angle</label>
+                <div class="form-fields">
+                    <input type="range" name="dangerZoneDefaultFillAnimationAngle" value="{{dangerous.animationAngle}}"
+                        min="0" max="360" step="15">
+                    <span class="range-value">{{dangerous.animationAngle}}°</span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Fill Pulse Enabled</label>
+                <input type="checkbox" name="dangerZoneDefaultFillPulse" {{checked dangerous.fillPulse}}>
+            </div>
+            <div class="form-group">
+                <label>Pulse Speed</label>
+                <div class="form-fields">
+                    <input type="range" name="dangerZoneDefaultFillPulseSpeed" value="{{dangerous.fillPulseSpeed}}"
+                        min="0.1" max="3" step="0.1">
+                    <span class="range-value">{{dangerous.fillPulseSpeed}}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Status Zone Tab -->
+        <div class="tab" data-tab="status" data-group="primary">
+            <div class="form-group">
+                <label>Default Fill Type</label>
+                <select name="statusZoneDefaultFillType" data-dtype="Number">
+                    {{selectOptions fillTypes selected=status.fillType}}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Default Texture</label>
+                <div class="form-fields">
+                    <input type="text" name="statusZoneDefaultTexture" value="{{status.texture}}">
+                    {{filePicker target="statusZoneDefaultTexture" type="imagevideo"}}
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Default Fill Color</label>
+                <div class="form-fields">
+                    <input type="color" name="statusZoneDefaultFillColor" value="{{status.fillColor}}">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Default Fill Opacity</label>
+                <div class="form-fields">
+                    <input type="range" name="statusZoneDefaultFillOpacity" value="{{status.fillOpacity}}" min="0"
+                        max="1" step="0.05">
+                    <span class="range-value">{{status.fillOpacity}}</span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Default Border Opacity</label>
+                <div class="form-fields">
+                    <input type="range" name="statusZoneDefaultBorderOpacity" value="{{status.borderOpacity}}" min="0"
+                        max="1" step="0.05">
+                    <span class="range-value">{{status.borderOpacity}}</span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Fill Animation Enabled</label>
+                <input type="checkbox" name="statusZoneDefaultAnimation" {{checked status.animation}}>
+            </div>
+            <div class="form-group">
+                <label>Animation Speed</label>
+                <div class="form-fields">
+                    <input type="range" name="statusZoneDefaultFillAnimationSpeed" value="{{status.animationSpeed}}"
+                        min="0.1" max="3" step="0.1">
+                    <span class="range-value">{{status.animationSpeed}}</span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Animation Angle</label>
+                <div class="form-fields">
+                    <input type="range" name="statusZoneDefaultFillAnimationAngle" value="{{status.animationAngle}}"
+                        min="0" max="360" step="15">
+                    <span class="range-value">{{status.animationAngle}}°</span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Fill Pulse Enabled</label>
+                <input type="checkbox" name="statusZoneDefaultFillPulse" {{checked status.fillPulse}}>
+            </div>
+            <div class="form-group">
+                <label>Pulse Speed</label>
+                <div class="form-fields">
+                    <input type="range" name="statusZoneDefaultFillPulseSpeed" value="{{status.fillPulseSpeed}}"
+                        min="0.1" max="3" step="0.1">
+                    <span class="range-value">{{status.fillPulseSpeed}}</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer class="sheet-footer flexrow">
+        <button type="submit" name="submit">
+            <i class="fas fa-save"></i> Save Changes
+        </button>
+    </footer>
+</form>
