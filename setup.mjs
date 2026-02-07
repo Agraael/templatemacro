@@ -544,13 +544,13 @@ async function _showStatusZoneDialog() {
       <div class="form-group">
         <label>Fill Type</label>
         <select name="fillType" id="statuszone-fillType">
-          <option value="1" ${defaultFillType === FILL_TYPES.SOLID ? 'selected' : ''}>Solid</option>
-          <option value="2" ${defaultFillType === FILL_TYPES.PATTERN ? 'selected' : ''}>Pattern (Stripes)</option>
+          <option value="1" ${defaults.fillType === FILL_TYPES.SOLID ? 'selected' : ''}>Solid</option>
+          <option value="2" ${defaults.fillType === FILL_TYPES.PATTERN ? 'selected' : ''}>Pattern (Stripes)</option>
         </select>
       </div>
       <div class="form-group">
         <label>Fill Color</label>
-        <input type="color" name="fillColor" value="${defaultFillColor}"/>
+        <input type="color" name="fillColor" value="${defaults.fillColor}"/>
       </div>
       <div class="form-group">
         <label>Border Color</label>
@@ -559,7 +559,7 @@ async function _showStatusZoneDialog() {
       <div class="form-group pattern-options" style="${isPattern ? '' : 'display:none;'}">
         <label>Pattern Texture</label>
         <div class="form-fields">
-          <input type="text" name="fillTexture" value="${defaultTexture}"/>
+          <input type="text" name="fillTexture" value="${defaults.texture}"/>
           <button type="button" class="file-picker" data-type="imagevideo" data-target="fillTexture" title="Browse Files">
             <i class="fas fa-file-import"></i>
           </button>
@@ -575,44 +575,44 @@ async function _showStatusZoneDialog() {
       <div class="form-group pattern-options" style="${isPattern ? '' : 'display:none;'}">
         <label>Fill Opacity</label>
         <div class="form-fields">
-          <input type="range" name="fillOpacity" value="${defaultFillOpacity}" min="0" max="1" step="0.05">
-          <span class="range-value">${defaultFillOpacity}</span>
+          <input type="range" name="fillOpacity" value="${defaults.fillOpacity}" min="0" max="1" step="0.05">
+          <span class="range-value">${defaults.fillOpacity}</span>
         </div>
       </div>
       <div class="form-group pattern-options" style="${isPattern ? '' : 'display:none;'}">
         <label>Border Opacity</label>
         <div class="form-fields">
-          <input type="range" name="borderOpacity" value="${defaultBorderOpacity}" min="0" max="1" step="0.05">
-          <span class="range-value">${defaultBorderOpacity}</span>
+          <input type="range" name="borderOpacity" value="${defaults.borderOpacity}" min="0" max="1" step="0.05">
+          <span class="range-value">${defaults.borderOpacity}</span>
         </div>
       </div>
       <div class="form-group pattern-options" style="${isPattern ? '' : 'display:none;'}">
         <label>Fill Animation</label>
-        <input type="checkbox" name="fillAnimation" ${defaultAnimation ? 'checked' : ''}>
+        <input type="checkbox" name="fillAnimation" ${defaults.animation ? 'checked' : ''}>
       </div>
       <div class="form-group pattern-options animation-options" style="${isPattern ? '' : 'display:none;'}">
         <label>Animation Speed</label>
         <div class="form-fields">
-          <input type="range" name="fillAnimationSpeed" value="${defaultAnimationSpeed}" min="0.1" max="3" step="0.1">
-          <span class="range-value">${defaultAnimationSpeed}</span>
+          <input type="range" name="fillAnimationSpeed" value="${defaults.animationSpeed}" min="0.1" max="3" step="0.1">
+          <span class="range-value">${defaults.animationSpeed}</span>
         </div>
       </div>
       <div class="form-group pattern-options animation-options" style="${isPattern ? '' : 'display:none;'}">
         <label>Animation Angle</label>
         <div class="form-fields">
-          <input type="range" name="fillAnimationAngle" value="${defaultAnimationAngle}" min="0" max="360" step="15">
-          <span class="range-value">${defaultAnimationAngle}°</span>
+          <input type="range" name="fillAnimationAngle" value="${defaults.animationAngle}" min="0" max="360" step="15">
+          <span class="range-value">${defaults.animationAngle}°</span>
         </div>
       </div>
       <div class="form-group pattern-options" style="${isPattern ? '' : 'display:none;'}">
         <label>Fill Pulse</label>
-        <input type="checkbox" name="fillPulse" ${defaultFillPulse ? 'checked' : ''}>
+        <input type="checkbox" name="fillPulse" ${defaults.fillPulse ? 'checked' : ''}>
       </div>
       <div class="form-group pattern-options pulse-options" style="${isPattern ? '' : 'display:none;'}">
         <label>Pulse Speed</label>
         <div class="form-fields">
-          <input type="range" name="fillPulseSpeed" value="${defaultFillPulseSpeed}" min="0.1" max="3" step="0.1">
-          <span class="range-value">${defaultFillPulseSpeed}</span>
+          <input type="range" name="fillPulseSpeed" value="${defaults.fillPulseSpeed}" min="0.1" max="3" step="0.1">
+          <span class="range-value">${defaults.fillPulseSpeed}</span>
         </div>
       </div>
     </form>

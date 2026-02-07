@@ -110,6 +110,14 @@ export function findContainers(tokenDoc) {
  * @param {boolean} [hooks.trigger.asGM] - Execute the command as GM
  */
 export async function placeZone(options = {}, hooks = {}) {
+  // Check for specific zone types before applying general defaults
+  if (options.dangerous) {
+    return await placeDangerousZone({ ...options, dangerous: null }, options.dangerous.damageType, options.dangerous.damageValue, hooks);
+  }
+  if (options.statusEffects?.length) {
+    return await placeZoneWithStatusEffect({ ...options, statusEffects: null }, options.statusEffects, hooks);
+  }
+
   const {
     x, y,
     size = 1,
@@ -126,17 +134,8 @@ export async function placeZone(options = {}, hooks = {}) {
     fillAnimationSpeed = 0.5,
     fillAnimationAngle = 0,
     fillPulse = false,
-    fillPulseSpeed = 1,
-    dangerous = null,
-    statusEffects = null
+    fillPulseSpeed = 1
   } = options;
-
-  if (dangerous) {
-    return await placeDangerousZone({ ...options, dangerous: null }, dangerous.damageType, dangerous.damageValue, hooks);
-  }
-  if (statusEffects?.length) {
-    return await placeZoneWithStatusEffect({ ...options, statusEffects: null }, statusEffects, hooks);
-  }
 
   let template = null;
   const flags = _buildTemplateMacroFlags(hooks);
@@ -199,6 +198,19 @@ export async function placeZone(options = {}, hooks = {}) {
  * @param {Object} [hooks] - Additional hooks
  */
 export async function placeZoneWithStatusEffect(options = {}, statusEffects = [], hooks = {}) {
+  const defaults = {
+    fillType: game.settings.get("templatemacro", "statusZoneDefaultFillType"),
+    fillTexture: game.settings.get("templatemacro", "statusZoneDefaultTexture"),
+    fillColor: game.settings.get("templatemacro", "statusZoneDefaultFillColor"),
+    fillOpacity: game.settings.get("templatemacro", "statusZoneDefaultFillOpacity"),
+    fillAnimation: game.settings.get("templatemacro", "statusZoneDefaultAnimation"),
+    fillPulse: game.settings.get("templatemacro", "statusZoneDefaultFillPulse"),
+    borderOpacity: game.settings.get("templatemacro", "statusZoneDefaultBorderOpacity"),
+    fillAnimationSpeed: game.settings.get("templatemacro", "statusZoneDefaultFillAnimationSpeed"),
+    fillAnimationAngle: game.settings.get("templatemacro", "statusZoneDefaultFillAnimationAngle"),
+    fillPulseSpeed: game.settings.get("templatemacro", "statusZoneDefaultFillPulseSpeed")
+  };
+  options = { ...defaults, ...options };
   const mkCmd = (del) => `
     const ef = ${JSON.stringify(statusEffects)};
     if (token && token.actor) {
@@ -272,6 +284,19 @@ export async function triggerDangerousZoneFlow(token, damageType = "kinetic", da
  * @param {Object} [hooks] - Additional hooks
  */
 export async function placeDangerousZone(options = {}, damageType = "kinetic", damageValue = 5, hooks = {}) {
+  const defaults = {
+    fillType: game.settings.get("templatemacro", "dangerZoneDefaultFillType"),
+    fillTexture: game.settings.get("templatemacro", "dangerZoneDefaultTexture"),
+    fillColor: game.settings.get("templatemacro", "dangerZoneDefaultFillColor"),
+    fillOpacity: game.settings.get("templatemacro", "dangerZoneDefaultFillOpacity"),
+    fillAnimation: game.settings.get("templatemacro", "dangerZoneDefaultAnimation"),
+    fillPulse: game.settings.get("templatemacro", "dangerZoneDefaultFillPulse"),
+    borderOpacity: game.settings.get("templatemacro", "dangerZoneDefaultBorderOpacity"),
+    fillAnimationSpeed: game.settings.get("templatemacro", "dangerZoneDefaultFillAnimationSpeed"),
+    fillAnimationAngle: game.settings.get("templatemacro", "dangerZoneDefaultFillAnimationAngle"),
+    fillPulseSpeed: game.settings.get("templatemacro", "dangerZoneDefaultFillPulseSpeed")
+  };
+  options = { ...defaults, ...options };
   const cmd = `if (token) await game.modules.get('templatemacro').api.triggerDangerousZoneFlow(token, "${damageType}", ${damageValue});`;
   
   return await placeZone(options, {
