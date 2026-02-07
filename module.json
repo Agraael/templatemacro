@@ -1,37 +1,37 @@
 {
-  "id": "templatemacro",
-  "title": "Template Macro",
-  "version": "12.0.0",
-  "authors": [
-    {
-      "name": "Zhell",
-      "url": "https://github.com/krbz999",
-      "discord": "Zhell9201",
-      "ko-fi": "https://ko-fi.com/zhell",
-      "patreon": "https://patreon.com/zhell"
-    }
-  ],
-  "compatibility": {
-    "minimum": "11",
-    "maximum": "12",
-    "verified": "12"
-  },
-  "esmodules": [
-    "setup.mjs"
-  ],
-  "styles": [
-    "styles/templatemacro.css"
-  ],
-  "relationships": {},
-  "languages": [
-    {
-      "lang": "en",
-      "name": "English",
-      "path": "lang/en.json",
-      "flags": {}
-    }
-  ],
-  "url": "https://github.com/Agraael/templatemacro",
-  "manifest": "https://github.com/Agraael/templatemacro/releases/latest/download/module.json",
-  "download": "https://github.com/Agraael/templatemacro/releases/latest/download/module.zip"
+    "id": "templatemacro",
+    "title": "Template Macro",
+    "version": "12.0.1",
+    "authors": [
+        {
+            "name": "Zhell",
+            "url": "https://github.com/krbz999",
+            "discord": "Zhell9201",
+            "ko-fi": "https://ko-fi.com/zhell",
+            "patreon": "https://patreon.com/zhell"
+        }
+    ],
+    "compatibility": {
+        "minimum": "11",
+        "maximum": "12",
+        "verified": "12"
+    },
+    "esmodules": [
+        "setup.mjs"
+    ],
+    "styles": [
+        "styles/templatemacro.css"
+    ],
+    "relationships": {},
+    "languages": [
+        {
+            "lang": "en",
+            "name": "English",
+            "path": "lang/en.json",
+            "flags": {}
+        }
+    ],
+    "url": "https://github.com/Agraael/templatemacro",
+    "manifest": "https://github.com/Agraael/templatemacro/releases/latest/download/module.json",
+    "download": "https://github.com/Agraael/templatemacro/releases/latest/download/module.zip"
 }

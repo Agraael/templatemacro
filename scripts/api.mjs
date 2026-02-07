@@ -130,7 +130,7 @@ export async function placeZone(options = {}, hooks = {}) {
     size = 1,
     type = "Blast",
     fillColor = "#ff6400",
-    borderColor = "#ffffff",
+    borderColor = "#000000",
     texture = null,
     dangerous = null,
     statusEffects = null
@@ -171,12 +171,14 @@ export async function placeZone(options = {}, hooks = {}) {
         const updateData = {
           fillColor,
           borderColor,
-          "texture.alpha": 0,
           flags: { ...template.flags, ...flags }
         };
-        if (texture) updateData.texture = texture;
+        if (texture) {
+          updateData.texture = texture;
+        }
 
         await template.update(updateData);
+        await template.update({ "flags.tokenmagic.templateData.opacity": 0 });
       }
     } catch (e) {
       return null;
