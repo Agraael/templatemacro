@@ -27,6 +27,17 @@
                 </div>
             </div>
             <div class="form-group">
+                <label>Default Border Color</label>
+                <div class="form-fields">
+                    <input type="color" name="dangerZoneDefaultBorderColor" value="{{dangerous.borderColor}}">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Use Damage Texture</label>
+                <input type="checkbox" name="dangerZoneUseDamageTexture" {{checked dangerous.useDamageTexture}}>
+                <p class="notes">Automatically select texture based on damage type</p>
+            </div>
+            <div class="form-group">
                 <label>Default Fill Opacity</label>
                 <div class="form-fields">
                     <input type="range" name="dangerZoneDefaultFillOpacity" value="{{dangerous.fillOpacity}}" min="0"
@@ -95,6 +106,12 @@
                 <label>Default Fill Color</label>
                 <div class="form-fields">
                     <input type="color" name="statusZoneDefaultFillColor" value="{{status.fillColor}}">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Default Border Color</label>
+                <div class="form-fields">
+                    <input type="color" name="statusZoneDefaultBorderColor" value="{{status.borderColor}}">
                 </div>
             </div>
             <div class="form-group">

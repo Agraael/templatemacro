@@ -43,18 +43,21 @@ class ZoneConfig extends FormApplication {
         fillType: game.settings.get(MODULE, "dangerZoneDefaultFillType"),
         texture: game.settings.get(MODULE, "dangerZoneDefaultTexture"),
         fillColor: game.settings.get(MODULE, "dangerZoneDefaultFillColor"),
+        borderColor: game.settings.get(MODULE, "dangerZoneDefaultBorderColor"),
         fillOpacity: game.settings.get(MODULE, "dangerZoneDefaultFillOpacity"),
         borderOpacity: game.settings.get(MODULE, "dangerZoneDefaultBorderOpacity"),
         animation: game.settings.get(MODULE, "dangerZoneDefaultAnimation"),
         animationSpeed: game.settings.get(MODULE, "dangerZoneDefaultFillAnimationSpeed"),
         animationAngle: game.settings.get(MODULE, "dangerZoneDefaultFillAnimationAngle"),
         fillPulse: game.settings.get(MODULE, "dangerZoneDefaultFillPulse"),
-        fillPulseSpeed: game.settings.get(MODULE, "dangerZoneDefaultFillPulseSpeed")
+        fillPulseSpeed: game.settings.get(MODULE, "dangerZoneDefaultFillPulseSpeed"),
+        useDamageTexture: game.settings.get(MODULE, "dangerZoneUseDamageTexture")
       },
       status: {
         fillType: game.settings.get(MODULE, "statusZoneDefaultFillType"),
         texture: game.settings.get(MODULE, "statusZoneDefaultTexture"),
         fillColor: game.settings.get(MODULE, "statusZoneDefaultFillColor"),
+        borderColor: game.settings.get(MODULE, "statusZoneDefaultBorderColor"),
         fillOpacity: game.settings.get(MODULE, "statusZoneDefaultFillOpacity"),
         borderOpacity: game.settings.get(MODULE, "statusZoneDefaultBorderOpacity"),
         animation: game.settings.get(MODULE, "statusZoneDefaultAnimation"),
@@ -164,6 +167,14 @@ function _registerLancerSettings() {
     type: new foundry.data.fields.ColorField(),
     default: "#ff6400"
   });
+  
+  game.settings.register(MODULE, "dangerZoneDefaultBorderColor", {
+    name: "Dangerous Zone: Default Border Color",
+    scope: "world",
+    config: false,
+    type: new foundry.data.fields.ColorField(),
+    default: "#000000"
+  });
 
   game.settings.register(MODULE, "dangerZoneDefaultFillOpacity", {
     name: "Dangerous Zone: Default Fill Opacity",
@@ -190,6 +201,15 @@ function _registerLancerSettings() {
     config: false,
     type: Boolean,
     default: false
+  });
+  
+  game.settings.register(MODULE, "dangerZoneUseDamageTexture", {
+    name: "Dangerous Zone: Use Damage Texture",
+    hint: "Automatically select texture based on damage type (overrides default texture)",
+    scope: "world",
+    config: false,
+    type: Boolean,
+    default: true
   });
 
   // Status Zone Defaults
@@ -223,6 +243,14 @@ function _registerLancerSettings() {
     type: new foundry.data.fields.ColorField(),
     default: "#0088ff"
   });
+  
+  game.settings.register(MODULE, "statusZoneDefaultBorderColor", {
+      name: "Status Zone: Default Border Color",
+      scope: "world",
+      config: false,
+      type: new foundry.data.fields.ColorField(),
+      default: "#000000"
+    });
 
   game.settings.register(MODULE, "statusZoneDefaultFillOpacity", {
     name: "Status Zone: Default Fill Opacity",
@@ -344,6 +372,7 @@ async function _showDangerousZoneDialog() {
   const defaultFillType = game.settings.get(MODULE, "dangerZoneDefaultFillType");
   const defaultTexture = game.settings.get(MODULE, "dangerZoneDefaultTexture");
   const defaultFillColor = game.settings.get(MODULE, "dangerZoneDefaultFillColor");
+  const defaultBorderColor = game.settings.get(MODULE, "dangerZoneDefaultBorderColor");
   const defaultFillOpacity = game.settings.get(MODULE, "dangerZoneDefaultFillOpacity");
   const defaultAnimation = game.settings.get(MODULE, "dangerZoneDefaultAnimation");
   const defaultFillPulse = game.settings.get(MODULE, "dangerZoneDefaultFillPulse");
@@ -396,7 +425,7 @@ async function _showDangerousZoneDialog() {
       </div>
       <div class="form-group">
         <label>Border Color</label>
-        <input type="color" name="borderColor" value="#000000"/>
+        <input type="color" name="borderColor" value="${defaultBorderColor}"/>
       </div>
       <div class="form-group pattern-options" style="${isPattern ? '' : 'display:none;'}">
         <label>Pattern Texture</label>
@@ -503,6 +532,7 @@ async function _showStatusZoneDialog() {
     fillType: game.settings.get(MODULE, "statusZoneDefaultFillType"),
     texture: game.settings.get(MODULE, "statusZoneDefaultTexture"),
     fillColor: game.settings.get(MODULE, "statusZoneDefaultFillColor"),
+    borderColor: game.settings.get(MODULE, "statusZoneDefaultBorderColor"),
     fillOpacity: game.settings.get(MODULE, "statusZoneDefaultFillOpacity"),
     animation: game.settings.get(MODULE, "statusZoneDefaultAnimation"),
     fillPulse: game.settings.get(MODULE, "statusZoneDefaultFillPulse"),
@@ -554,7 +584,7 @@ async function _showStatusZoneDialog() {
       </div>
       <div class="form-group">
         <label>Border Color</label>
-        <input type="color" name="borderColor" value="#000000"/>
+        <input type="color" name="borderColor" value="${defaults.borderColor}"/>
       </div>
       <div class="form-group pattern-options" style="${isPattern ? '' : 'display:none;'}">
         <label>Pattern Texture</label>

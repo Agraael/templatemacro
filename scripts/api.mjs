@@ -297,6 +297,24 @@ export async function placeDangerousZone(options = {}, damageType = "kinetic", d
     fillPulseSpeed: game.settings.get("templatemacro", "dangerZoneDefaultFillPulseSpeed")
   };
   options = { ...defaults, ...options };
+  
+  const useDamageTexture = game.settings.get("templatemacro", "dangerZoneUseDamageTexture");
+  if (useDamageTexture && (!options.fillTexture || options.fillTexture === defaults.fillTexture)) {
+      const damageTextureMap = {
+          kinetic: "modules/templatemacro/textures/hatching-kinetic.png",
+          energy: "modules/templatemacro/textures/hatching-energy.png",
+          explosive: "modules/templatemacro/textures/hatching-explosive.png",
+          heat: "modules/templatemacro/textures/hatching-heat.png",
+          burn: "modules/templatemacro/textures/hatching-fire.png",
+          variable: "modules/templatemacro/textures/hatching-radioactive.png"
+      };
+      
+      const texturePath = damageTextureMap[damageType.toLowerCase()];
+      if (texturePath) {
+          options.fillTexture = texturePath;
+      }
+  }
+
   const cmd = `if (token) await game.modules.get('templatemacro').api.triggerDangerousZoneFlow(token, "${damageType}", ${damageValue});`;
   
   return await placeZone(options, {
