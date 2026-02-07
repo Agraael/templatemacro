@@ -294,6 +294,8 @@ export async function triggerDangerousZoneFlow(token, damageType = "kinetic", da
 
   if (game.combat && game.combat.started) {
     await actor.setFlag("templatemacro", "dangerousZoneRound", currentRound);
+  } else if (lastRound !== undefined) {
+    await actor.unsetFlag("templatemacro", "dangerousZoneRound");
   }
 
   const triggerDamage = async () => {

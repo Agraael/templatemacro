@@ -99,7 +99,7 @@ async function _showDangerousZoneDialog() {
       </div>
       <div class="form-group">
         <label>Border Color</label>
-        <input type="color" name="borderColor" value="#ffffff"/>
+        <input type="color" name="borderColor" value="#000000"/>
       </div>
       <div class="form-group">
         <label>Damage Type</label>
@@ -182,7 +182,7 @@ async function _showStatusZoneDialog() {
       </div>
       <div class="form-group">
         <label>Border Color</label>
-        <input type="color" name="borderColor" value="#ffffff"/>
+        <input type="color" name="borderColor" value="#000000"/>
       </div>
       <div class="form-group">
         <label>Status Effects (Ctrl+Click for multiple)</label>
