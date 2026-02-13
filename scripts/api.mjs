@@ -253,25 +253,28 @@ export async function triggerDangerousZoneFlow(token, damageType = "kinetic", da
 
   const typeMap = { kinetic: "Kinetic", energy: "Energy", explosive: "Explosive", burn: "Burn", heat: "Heat", variable: "Variable" };
 
-  Hooks.once("createChatMessage", async msg => {
-    if (msg.user.id === game.user.id && msg.speaker.actor === actor.id && msg.rolls[0]?.total < 10) {
-      const t = token.object || token;
-      if (t?.setTarget) {
-        t.setTarget(true, { releaseOthers: true, groupSelection: false });
-      }
-      
-      const flow = new game.lancer.flows.get("DamageRollFlow")(actor.uuid, {
-        title: "Dangerous Terrain",
-        damage: [{ val: String(damageValue), type: typeMap[damageType.toLowerCase()] || "Kinetic" }],
-        tags: [],
-        hit_results: [],
-        has_normal_hit: true
-      });
-      await flow.begin();
-    }
-  });
+  const StatRollFlow = game.lancer.flows.get("StatRollFlow");
+  if (!StatRollFlow) return;
 
-  await actor.beginStatFlow("system.eng", "Dangerous Terrain :: ENG");
+  const flow = new StatRollFlow(actor, { path: "system.eng", title: "Dangerous Terrain :: ENG" });
+  const completed = await flow.begin();
+
+  if (completed && (flow.state.data?.result?.roll?.total ?? 10) < 10) {
+    const t = token.object || token;
+    if (t?.setTarget) {
+      t.setTarget(true, { releaseOthers: true, groupSelection: false });
+    }
+
+    const DamageRollFlow = game.lancer.flows.get("DamageRollFlow");
+    const dmgFlow = new DamageRollFlow(actor.uuid, {
+      title: "Dangerous Terrain",
+      damage: [{ val: String(damageValue), type: typeMap[damageType.toLowerCase()] || "Kinetic" }],
+      tags: [],
+      hit_results: [],
+      has_normal_hit: true
+    });
+    await dmgFlow.begin();
+  }
 }
 
 
