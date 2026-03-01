@@ -2,6 +2,7 @@
     <nav class="sheet-tabs tabs" data-group="primary">
         <a class="item" data-tab="dangerous">Dangerous Zone</a>
         <a class="item" data-tab="status">Status Zone</a>
+        <a class="item" data-tab="difficult">Difficult Terrain</a>
     </nav>
 
     <section class="content">
@@ -160,6 +161,87 @@
                     <input type="range" name="statusZoneDefaultFillPulseSpeed" value="{{status.fillPulseSpeed}}"
                         min="0.1" max="3" step="0.1">
                     <span class="range-value">{{status.fillPulseSpeed}}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Difficult Terrain Tab -->
+        <div class="tab" data-tab="difficult" data-group="primary">
+            <div class="form-group">
+                <label>Default Movement Penalty</label>
+                <input type="number" name="difficultTerrainDefaultMovementPenalty" value="{{difficult.movementPenalty}}" min="0" step="1">
+            </div>
+            <div class="form-group">
+                <label>Flat Penalty (add to cost)</label>
+                <input type="checkbox" name="difficultTerrainDefaultFlatPenalty" {{checked difficult.flatPenalty}}>
+                <p class="notes">Checked = flat cost added per hex. Unchecked = speed multiplier.</p>
+            </div>
+            <div class="form-group">
+                <label>Default Fill Type</label>
+                <select name="difficultTerrainDefaultFillType" data-dtype="Number">
+                    {{selectOptions fillTypes selected=difficult.fillType}}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Default Texture</label>
+                <div class="form-fields">
+                    <input type="text" name="difficultTerrainDefaultTexture" value="{{difficult.texture}}">
+                    {{filePicker target="difficultTerrainDefaultTexture" type="imagevideo"}}
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Default Fill Color</label>
+                <div class="form-fields">
+                    <input type="color" name="difficultTerrainDefaultFillColor" value="{{difficult.fillColor}}">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Default Border Color</label>
+                <div class="form-fields">
+                    <input type="color" name="difficultTerrainDefaultBorderColor" value="{{difficult.borderColor}}">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Default Fill Opacity</label>
+                <div class="form-fields">
+                    <input type="range" name="difficultTerrainDefaultFillOpacity" value="{{difficult.fillOpacity}}" min="0" max="1" step="0.05">
+                    <span class="range-value">{{difficult.fillOpacity}}</span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Default Border Opacity</label>
+                <div class="form-fields">
+                    <input type="range" name="difficultTerrainDefaultBorderOpacity" value="{{difficult.borderOpacity}}" min="0" max="1" step="0.05">
+                    <span class="range-value">{{difficult.borderOpacity}}</span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Fill Animation Enabled</label>
+                <input type="checkbox" name="difficultTerrainDefaultAnimation" {{checked difficult.animation}}>
+            </div>
+            <div class="form-group">
+                <label>Animation Speed</label>
+                <div class="form-fields">
+                    <input type="range" name="difficultTerrainDefaultFillAnimationSpeed" value="{{difficult.animationSpeed}}" min="0.1" max="3" step="0.1">
+                    <span class="range-value">{{difficult.animationSpeed}}</span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Animation Angle</label>
+                <div class="form-fields">
+                    <input type="range" name="difficultTerrainDefaultFillAnimationAngle" value="{{difficult.animationAngle}}" min="0" max="360" step="15">
+                    <span class="range-value">{{difficult.animationAngle}}°</span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Fill Pulse Enabled</label>
+                <input type="checkbox" name="difficultTerrainDefaultFillPulse" {{checked difficult.fillPulse}}>
+            </div>
+            <div class="form-group">
+                <label>Pulse Speed</label>
+                <div class="form-fields">
+                    <input type="range" name="difficultTerrainDefaultFillPulseSpeed" value="{{difficult.fillPulseSpeed}}" min="0.1" max="3" step="0.1">
+                    <span class="range-value">{{difficult.fillPulseSpeed}}</span>
                 </div>
             </div>
         </div>

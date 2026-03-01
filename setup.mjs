@@ -5,7 +5,8 @@ import {
   placeZone,
   placeZoneWithStatusEffect,
   placeDangerousZone,
-  triggerDangerousZoneFlow
+  triggerDangerousZoneFlow,
+  placeDifficultTerrainZone
 } from "./scripts/api.mjs";
 import { MODULE } from "./scripts/constants.mjs";
 import {
@@ -65,6 +66,21 @@ class ZoneConfig extends FormApplication {
         animationAngle: game.settings.get(MODULE, "statusZoneDefaultFillAnimationAngle"),
         fillPulse: game.settings.get(MODULE, "statusZoneDefaultFillPulse"),
         fillPulseSpeed: game.settings.get(MODULE, "statusZoneDefaultFillPulseSpeed")
+      },
+      difficult: {
+        movementPenalty: game.settings.get(MODULE, "difficultTerrainDefaultMovementPenalty"),
+        flatPenalty: game.settings.get(MODULE, "difficultTerrainDefaultFlatPenalty"),
+        fillType: game.settings.get(MODULE, "difficultTerrainDefaultFillType"),
+        texture: game.settings.get(MODULE, "difficultTerrainDefaultTexture"),
+        fillColor: game.settings.get(MODULE, "difficultTerrainDefaultFillColor"),
+        borderColor: game.settings.get(MODULE, "difficultTerrainDefaultBorderColor"),
+        fillOpacity: game.settings.get(MODULE, "difficultTerrainDefaultFillOpacity"),
+        borderOpacity: game.settings.get(MODULE, "difficultTerrainDefaultBorderOpacity"),
+        animation: game.settings.get(MODULE, "difficultTerrainDefaultAnimation"),
+        animationSpeed: game.settings.get(MODULE, "difficultTerrainDefaultFillAnimationSpeed"),
+        animationAngle: game.settings.get(MODULE, "difficultTerrainDefaultFillAnimationAngle"),
+        fillPulse: game.settings.get(MODULE, "difficultTerrainDefaultFillPulse"),
+        fillPulseSpeed: game.settings.get(MODULE, "difficultTerrainDefaultFillPulseSpeed")
       }
     };
   }
@@ -84,7 +100,8 @@ Hooks.once("setup", () => {
     placeZone,
     placeZoneWithStatusEffect,
     placeDangerousZone,
-    triggerDangerousZoneFlow
+    triggerDangerousZoneFlow,
+    placeDifficultTerrainZone
   };
 
   MeasuredTemplateDocument.prototype.callMacro = async function(type = "never", options = {}) {
@@ -127,6 +144,13 @@ Hooks.once("setup", () => {
           icon: "fas fa-bolt",
           button: true,
           onClick: () => _showStatusZoneDialog()
+        },
+        {
+          name: "difficultTerrainZone",
+          title: "Place Difficult Terrain Zone",
+          icon: "fas fa-mountain",
+          button: true,
+          onClick: () => _showDifficultTerrainZoneDialog()
         }
       );
     });
@@ -307,6 +331,50 @@ function _registerLancerSettings() {
     default: 1
   });
 
+  // Difficult Terrain Zone Defaults
+  game.settings.register(MODULE, "difficultTerrainDefaultMovementPenalty", {
+    scope: "world", config: false, type: Number, default: 1
+  });
+  game.settings.register(MODULE, "difficultTerrainDefaultFlatPenalty", {
+    scope: "world", config: false, type: Boolean, default: true
+  });
+  game.settings.register(MODULE, "difficultTerrainDefaultFillType", {
+    scope: "world", config: false, type: Number, default: FILL_TYPES.PATTERN,
+    choices: { [FILL_TYPES.SOLID]: "Solid", [FILL_TYPES.PATTERN]: "Pattern" }
+  });
+  game.settings.register(MODULE, "difficultTerrainDefaultTexture", {
+    scope: "world", config: false, type: String, filePicker: "imagevideo",
+    default: "modules/templatemacro/textures/hatching-rock.png"
+  });
+  game.settings.register(MODULE, "difficultTerrainDefaultFillColor", {
+    scope: "world", config: false, type: new foundry.data.fields.ColorField(), default: "#e83bd1"
+  });
+  game.settings.register(MODULE, "difficultTerrainDefaultBorderColor", {
+    scope: "world", config: false, type: new foundry.data.fields.ColorField(), default: "#000000"
+  });
+  game.settings.register(MODULE, "difficultTerrainDefaultFillOpacity", {
+    scope: "world", config: false, type: Number, default: 0.5,
+    range: { min: 0, max: 1, step: 0.05 }
+  });
+  game.settings.register(MODULE, "difficultTerrainDefaultBorderOpacity", {
+    scope: "world", config: false, type: Number, default: 0.5
+  });
+  game.settings.register(MODULE, "difficultTerrainDefaultAnimation", {
+    scope: "world", config: false, type: Boolean, default: false
+  });
+  game.settings.register(MODULE, "difficultTerrainDefaultFillPulse", {
+    scope: "world", config: false, type: Boolean, default: false
+  });
+  game.settings.register(MODULE, "difficultTerrainDefaultFillAnimationSpeed", {
+    scope: "world", config: false, type: Number, default: 0.5
+  });
+  game.settings.register(MODULE, "difficultTerrainDefaultFillAnimationAngle", {
+    scope: "world", config: false, type: Number, default: 0
+  });
+  game.settings.register(MODULE, "difficultTerrainDefaultFillPulseSpeed", {
+    scope: "world", config: false, type: Number, default: 1
+  });
+
   // Status Zone - Additional Defaults
   game.settings.register(MODULE, "statusZoneDefaultBorderOpacity", {
     scope: "world",
@@ -336,7 +404,7 @@ function _registerLancerSettings() {
   game.settings.registerMenu(MODULE, "zoneConfig", {
     name: "Zone Configuration",
     label: "Configure Zones",
-    hint: "Configure default settings for Dangerous and Status Zones",
+    hint: "Configure default settings for Dangerous, Status, and Difficult Terrain Zones",
     icon: "fas fa-cogs",
     type: ZoneConfig,
     restricted: true
@@ -673,11 +741,167 @@ async function _showStatusZoneDialog() {
           const fillPulseSpeed = parseFloat(html.find('[name="fillPulseSpeed"]').val()) || 1;
           
           if (selected.length === 0) return ui.notifications.warn("Select at least one status effect.");
-          
+
           await placeZoneWithStatusEffect({
             size, type, fillColor, borderColor, fillType, fillTexture, fillSize, fillOpacity, borderOpacity,
             fillAnimation, fillAnimationSpeed, fillAnimationAngle, fillPulse, fillPulseSpeed
           }, selected);
+        }
+      },
+      cancel: { icon: '<i class="fas fa-times"></i>', label: "Cancel" }
+    },
+    default: "place",
+    render: initDialogListeners
+  }).render(true);
+}
+
+async function _showDifficultTerrainZoneDialog() {
+  const defaults = {
+    movementPenalty: game.settings.get(MODULE, "difficultTerrainDefaultMovementPenalty"),
+    flatPenalty: game.settings.get(MODULE, "difficultTerrainDefaultFlatPenalty"),
+    fillType: game.settings.get(MODULE, "difficultTerrainDefaultFillType"),
+    texture: game.settings.get(MODULE, "difficultTerrainDefaultTexture"),
+    fillColor: game.settings.get(MODULE, "difficultTerrainDefaultFillColor"),
+    borderColor: game.settings.get(MODULE, "difficultTerrainDefaultBorderColor"),
+    fillOpacity: game.settings.get(MODULE, "difficultTerrainDefaultFillOpacity"),
+    animation: game.settings.get(MODULE, "difficultTerrainDefaultAnimation"),
+    fillPulse: game.settings.get(MODULE, "difficultTerrainDefaultFillPulse"),
+    borderOpacity: game.settings.get(MODULE, "difficultTerrainDefaultBorderOpacity"),
+    animationSpeed: game.settings.get(MODULE, "difficultTerrainDefaultFillAnimationSpeed"),
+    animationAngle: game.settings.get(MODULE, "difficultTerrainDefaultFillAnimationAngle"),
+    fillPulseSpeed: game.settings.get(MODULE, "difficultTerrainDefaultFillPulseSpeed")
+  };
+  const isPattern = defaults.fillType === FILL_TYPES.PATTERN;
+
+  const content = `
+    <form>
+      <div class="form-group">
+        <label>Zone Size</label>
+        <input type="number" name="size" value="1" min="0" max="10" step="0.5"/>
+      </div>
+      <div class="form-group">
+        <label>Zone Type</label>
+        <select name="type">
+          <option value="Blast">Blast</option>
+          <option value="Burst">Burst</option>
+          <option value="Cone">Cone</option>
+          <option value="Line">Line</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Movement Penalty (feet per hex)</label>
+        <input type="number" name="movementPenalty" value="${defaults.movementPenalty}" min="1" max="20" step="1"/>
+      </div>
+      <div class="form-group">
+        <label>Flat Penalty (adds cost; uncheck to multiply speed)</label>
+        <input type="checkbox" name="isFlatPenalty" ${defaults.flatPenalty ? "checked" : ""}/>
+      </div>
+      <div class="form-group">
+        <label>Fill Type</label>
+        <select name="fillType">
+          <option value="1" ${defaults.fillType === FILL_TYPES.SOLID ? 'selected' : ''}>Solid</option>
+          <option value="2" ${defaults.fillType === FILL_TYPES.PATTERN ? 'selected' : ''}>Pattern (Stripes)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Fill Color</label>
+        <input type="color" name="fillColor" value="${defaults.fillColor}"/>
+      </div>
+      <div class="form-group">
+        <label>Border Color</label>
+        <input type="color" name="borderColor" value="${defaults.borderColor}"/>
+      </div>
+      <div class="form-group pattern-options" style="${isPattern ? '' : 'display:none;'}">
+        <label>Pattern Texture</label>
+        <div class="form-fields">
+          <input type="text" name="fillTexture" value="${defaults.texture}"/>
+          <button type="button" class="file-picker" data-type="imagevideo" data-target="fillTexture" title="Browse Files">
+            <i class="fas fa-file-import"></i>
+          </button>
+        </div>
+      </div>
+      <div class="form-group pattern-options" style="${isPattern ? '' : 'display:none;'}">
+        <label>Pattern Size</label>
+        <div class="form-fields">
+          <input type="range" name="fillSize" value="0.5" min="0.1" max="3" step="0.1">
+          <span class="range-value">0.5</span>
+        </div>
+      </div>
+      <div class="form-group pattern-options" style="${isPattern ? '' : 'display:none;'}">
+        <label>Fill Opacity</label>
+        <div class="form-fields">
+          <input type="range" name="fillOpacity" value="${defaults.fillOpacity}" min="0" max="1" step="0.05">
+          <span class="range-value">${defaults.fillOpacity}</span>
+        </div>
+      </div>
+      <div class="form-group pattern-options" style="${isPattern ? '' : 'display:none;'}">
+        <label>Border Opacity</label>
+        <div class="form-fields">
+          <input type="range" name="borderOpacity" value="${defaults.borderOpacity}" min="0" max="1" step="0.05">
+          <span class="range-value">${defaults.borderOpacity}</span>
+        </div>
+      </div>
+      <div class="form-group pattern-options" style="${isPattern ? '' : 'display:none;'}">
+        <label>Fill Animation</label>
+        <input type="checkbox" name="fillAnimation" ${defaults.animation ? 'checked' : ''}>
+      </div>
+      <div class="form-group pattern-options animation-options" style="${isPattern ? '' : 'display:none;'}">
+        <label>Animation Speed</label>
+        <div class="form-fields">
+          <input type="range" name="fillAnimationSpeed" value="${defaults.animationSpeed}" min="0.1" max="3" step="0.1">
+          <span class="range-value">${defaults.animationSpeed}</span>
+        </div>
+      </div>
+      <div class="form-group pattern-options animation-options" style="${isPattern ? '' : 'display:none;'}">
+        <label>Animation Angle</label>
+        <div class="form-fields">
+          <input type="range" name="fillAnimationAngle" value="${defaults.animationAngle}" min="0" max="360" step="15">
+          <span class="range-value">${defaults.animationAngle}°</span>
+        </div>
+      </div>
+      <div class="form-group pattern-options" style="${isPattern ? '' : 'display:none;'}">
+        <label>Fill Pulse</label>
+        <input type="checkbox" name="fillPulse" ${defaults.fillPulse ? 'checked' : ''}>
+      </div>
+      <div class="form-group pattern-options pulse-options" style="${isPattern ? '' : 'display:none;'}">
+        <label>Pulse Speed</label>
+        <div class="form-fields">
+          <input type="range" name="fillPulseSpeed" value="${defaults.fillPulseSpeed}" min="0.1" max="3" step="0.1">
+          <span class="range-value">${defaults.fillPulseSpeed}</span>
+        </div>
+      </div>
+    </form>
+  `;
+
+  new Dialog({
+    title: "Place Difficult Terrain Zone",
+    content,
+    buttons: {
+      place: {
+        icon: '<i class="fas fa-check"></i>',
+        label: "Place",
+        callback: async (html) => {
+          const size = parseFloat(html.find('[name="size"]').val()) || 1;
+          const type = html.find('[name="type"]').val();
+          const movementPenalty = parseInt(html.find('[name="movementPenalty"]').val()) || defaults.movementPenalty;
+          const isFlatPenalty = html.find('[name="isFlatPenalty"]').is(':checked');
+          const fillColor = html.find('[name="fillColor"]').val();
+          const borderColor = html.find('[name="borderColor"]').val();
+          const fillType = parseInt(html.find('[name="fillType"]').val());
+          const fillTexture = html.find('[name="fillTexture"]').val();
+          const fillSize = parseFloat(html.find('[name="fillSize"]').val()) || 0.5;
+          const fillOpacity = parseFloat(html.find('[name="fillOpacity"]').val()) || 0.5;
+          const borderOpacity = parseFloat(html.find('[name="borderOpacity"]').val()) || 0.5;
+          const fillAnimation = html.find('[name="fillAnimation"]').is(':checked');
+          const fillAnimationSpeed = parseFloat(html.find('[name="fillAnimationSpeed"]').val()) || 0.5;
+          const fillAnimationAngle = parseFloat(html.find('[name="fillAnimationAngle"]').val()) || 0;
+          const fillPulse = html.find('[name="fillPulse"]').is(':checked');
+          const fillPulseSpeed = parseFloat(html.find('[name="fillPulseSpeed"]').val()) || 1;
+
+          await placeDifficultTerrainZone({
+            size, type, fillColor, borderColor, fillType, fillTexture, fillSize, fillOpacity, borderOpacity,
+            fillAnimation, fillAnimationSpeed, fillAnimationAngle, fillPulse, fillPulseSpeed
+          }, movementPenalty, isFlatPenalty);
         }
       },
       cancel: { icon: '<i class="fas fa-times"></i>', label: "Cancel" }

@@ -333,6 +333,37 @@ export async function placeDangerousZone(options = {}, damageType = "kinetic", d
   });
 }
 
+/**
+ * Place a zone that imposes a movement penalty (difficult terrain) for ElevationRuler.
+ * Tokens moving through it pay extra movement cost per hex.
+ * @param {Object} options - Standard placeZone options
+ * @param {number} [movementPenalty=2] - Cost added (flat) or multiplied per hex
+ * @param {boolean} [isFlatPenalty=true] - If true, adds flat feet per hex; if false, multiplies movement cost
+ * @param {Object} [hooks] - Additional templateMacro hooks
+ */
+export async function placeDifficultTerrainZone(options = {}, movementPenalty = 1, isFlatPenalty = true, hooks = {}) {
+  const defaults = {
+    fillType: game.settings.get("templatemacro", "difficultTerrainDefaultFillType"),
+    fillTexture: game.settings.get("templatemacro", "difficultTerrainDefaultTexture"),
+    fillColor: game.settings.get("templatemacro", "difficultTerrainDefaultFillColor"),
+    fillOpacity: game.settings.get("templatemacro", "difficultTerrainDefaultFillOpacity"),
+    fillAnimation: game.settings.get("templatemacro", "difficultTerrainDefaultAnimation"),
+    fillPulse: game.settings.get("templatemacro", "difficultTerrainDefaultFillPulse"),
+    borderOpacity: game.settings.get("templatemacro", "difficultTerrainDefaultBorderOpacity"),
+    fillAnimationSpeed: game.settings.get("templatemacro", "difficultTerrainDefaultFillAnimationSpeed"),
+    fillAnimationAngle: game.settings.get("templatemacro", "difficultTerrainDefaultFillAnimationAngle"),
+    fillPulseSpeed: game.settings.get("templatemacro", "difficultTerrainDefaultFillPulseSpeed")
+  };
+  options = { ...defaults, ...options };
+
+  const result = await placeZone(options, hooks);
+  if (result?.template) {
+    await result.template.setFlag("elevationruler", "movementPenalty", movementPenalty);
+    await result.template.setFlag("elevationruler", "flatMovementPenalty", isFlatPenalty);
+  }
+  return result;
+}
+
 function _buildTemplateMacroFlags(hooks) {
   if (!hooks || Object.keys(hooks).length === 0) return {};
   
