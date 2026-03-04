@@ -8,7 +8,8 @@ import {
 import {
   _getFirstOwnerId,
   callMacro,
-  renderTemplateMacroConfig
+  renderTemplateMacroConfig,
+  unregisterCallbacks
 } from "./templatemacro.mjs";
 
 // Create a button in a template's header.
@@ -150,6 +151,7 @@ export function _deleteTemplate(templateDoc, context, userId) {
     }
   };
   callMacro(templateDoc, "whenDeleted", macroContext);
+  unregisterCallbacks(templateDoc.id);
 }
 
 // when hidden/revealed or moved.

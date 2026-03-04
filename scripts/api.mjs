@@ -1,3 +1,6 @@
+import { MODULE } from "./constants.mjs";
+import { callMacro, registerCallback, unregisterCallbacks } from "./templatemacro.mjs";
+
 export function findGrids(A, B, templateDoc) {
   const a = canvas.grid.getCenter(A.x, A.y);
   const b = canvas.grid.getCenter(B.x, B.y);
@@ -49,6 +52,7 @@ export function findContained(templateDoc) {
   const { size } = templateDoc.parent.grid;
   const { x: tempx, y: tempy, object } = templateDoc;
   const contained = new Set();
+  if (!object?.shape) return [];
   
   for (const tokenDoc of templateDoc.parent.tokens) {
     const { width, height, x: tokx, y: toky } = tokenDoc;
@@ -56,7 +60,7 @@ export function findContained(templateDoc) {
     const startY = height >= 1 ? 0.5 : height / 2;
     
     for (let x = startX; x < width; x++) {
-      for (let y = startY; y < width; y++) {
+      for (let y = startY; y < height; y++) {
         const contains = object.shape.contains(tokx + x * size - tempx, toky + y * size - tempy);
         if (contains) {
           contained.add(tokenDoc.id);
@@ -75,11 +79,12 @@ export function findContainers(tokenDoc) {
   
   for (const templateDoc of tokenDoc.parent.templates) {
     const { x: tempx, y: tempy, object } = templateDoc;
+    if (!object?.shape) continue;
     const startX = width >= 1 ? 0.5 : width / 2;
     const startY = height >= 1 ? 0.5 : height / 2;
     
     for (let x = startX; x < width; x++) {
-      for (let y = startY; y < width; y++) {
+      for (let y = startY; y < height; y++) {
         const contains = object.shape.contains(tokx + x * size - tempx, toky + y * size - tempy);
         if (contains) {
           containers.add(templateDoc.id);
@@ -93,6 +98,26 @@ export function findContainers(tokenDoc) {
 
 
 /**
+ * Place a template zone on the scene. Supports three specialized shortcut modes via options:
+ *
+ * **Dangerous zone** (triggers ENG check on entry/turn start, deals damage on failure):
+ * ```js
+ * placeZone({ x, y, size, dangerous: { damageType: "kinetic", damageValue: 5 } });
+ * // equivalent to: placeDangerousZone(options, damageType, damageValue, hooks)
+ * ```
+ *
+ * **Status effect zone** (applies active effects to tokens inside):
+ * ```js
+ * placeZone({ x, y, size, statusEffects: ["impaired", "lockon"] });
+ * // equivalent to: placeZoneWithStatusEffect(options, statusEffects, hooks)
+ * ```
+ *
+ * **Difficult terrain zone** (imposes movement penalty via ElevationRuler):
+ * ```js
+ * placeZone({ x, y, size, difficultTerrain: { movementPenalty: 1, isFlatPenalty: true } });
+ * // equivalent to: placeDifficultTerrainZone(options, movementPenalty, isFlatPenalty, hooks)
+ * ```
+ *
  * @param {Object} options
  * @param {number} [options.x]
  * @param {number} [options.y]
@@ -101,10 +126,13 @@ export function findContainers(tokenDoc) {
  * @param {string} [options.fillColor="#ff6400"]
  * @param {string} [options.borderColor="#000000"]
  * @param {string} [options.texture]
- * @param {Object} [options.dangerous] - If set, creates a dangerous zone that triggers ENG checks
- * @param {string} [options.dangerous.damageType="kinetic"] - Damage type (kinetic, energy, explosive, heat, burn)
+ * @param {Object} [options.dangerous] - Shortcut: creates a dangerous zone that triggers ENG checks
+ * @param {string} [options.dangerous.damageType="kinetic"] - Damage type (kinetic, energy, explosive, heat, burn, variable)
  * @param {number} [options.dangerous.damageValue=5] - Amount of damage on failed check
- * @param {string[]} [options.statusEffects] - Array of status effect IDs to apply (e.g. ["impaired", "lockon"])
+ * @param {string[]} [options.statusEffects] - Shortcut: array of status effect IDs to apply (e.g. ["impaired", "lockon"])
+ * @param {Object} [options.difficultTerrain] - Shortcut: creates a difficult terrain zone via ElevationRuler
+ * @param {number} [options.difficultTerrain.movementPenalty=1] - Movement cost added (flat) or multiplied per hex
+ * @param {boolean} [options.difficultTerrain.isFlatPenalty=true] - If true, adds flat feet per hex; if false, multiplies cost
  * @param {Object} [hooks] - Triggers: created, deleted, moved, hidden, revealed, entered, left, through, staying, turnStart, turnEnd
  * @param {string} [hooks.trigger.command] - The macro command to execute for the specific trigger
  * @param {boolean} [hooks.trigger.asGM] - Execute the command as GM
@@ -116,6 +144,9 @@ export async function placeZone(options = {}, hooks = {}) {
   }
   if (options.statusEffects?.length) {
     return await placeZoneWithStatusEffect({ ...options, statusEffects: null }, options.statusEffects, hooks);
+  }
+  if (options.difficultTerrain) {
+    return await placeDifficultTerrainZone({ ...options, difficultTerrain: null }, options.difficultTerrain.movementPenalty, options.difficultTerrain.isFlatPenalty, hooks);
   }
 
   const {
@@ -134,20 +165,27 @@ export async function placeZone(options = {}, hooks = {}) {
     fillAnimationSpeed = 0.5,
     fillAnimationAngle = 0,
     fillPulse = false,
-    fillPulseSpeed = 1
+    fillPulseSpeed = 1,
+    centerLabel = ""
   } = options;
 
+  let adjustedSize = size;
+  if (game.system.id === "lancer" && [2, 3, 4, 5].includes(canvas.grid.type)) {
+    adjustedSize += 0.33;
+  }
+
   let template = null;
-  const flags = _buildTemplateMacroFlags(hooks);
+  const { flags, pendingCallbacks } = _buildTemplateMacroFlags(hooks);
   const tf = {
     ...(flags.templatemacro || {}),
     fillType, fillTexture, fillSize, fillOpacity, borderOpacity,
-    fillAnimation, fillAnimationSpeed, fillAnimationAngle, fillPulse, fillPulseSpeed
+    fillAnimation, fillAnimationSpeed, fillAnimationAngle, fillPulse, fillPulseSpeed,
+    centerLabel
   };
 
   if (game.system.id === "lancer" && game.lancer?.canvas?.WeaponRangeTemplate) {
     try {
-      const templatePreview = game.lancer.canvas.WeaponRangeTemplate.fromRange({ type, val: Math.max(size, 0) });
+      const templatePreview = game.lancer.canvas.WeaponRangeTemplate.fromRange({ type, val: Math.max(adjustedSize, 0) });
       template = await templatePreview.placeTemplate();
       if (template) {
         await template.update({
@@ -164,8 +202,15 @@ export async function placeZone(options = {}, hooks = {}) {
           }
         });
         await template.update({ "flags.tokenmagic.templateData.opacity": 0 });
+        
+        // Manually trigger whenCreated for Lancer because initial placement doesn't have flags
+        if (flags.templatemacro?.whenCreated) {
+          const { id: gmId } = game.users.find(u => u.active && u.isGM) ?? {};
+          callMacro(template, "whenCreated", { gmId, userId: game.user.id, coords: { previous: null, current: { x: template.x, y: template.y } } });
+        }
       }
     } catch (e) {
+      console.error(e);
       return null;
     }
   } else if (x !== undefined && y !== undefined) {
@@ -174,7 +219,7 @@ export async function placeZone(options = {}, hooks = {}) {
       t: tMap[type.toLowerCase()] || "circle",
       user: game.user.id,
       x, y,
-      distance: size,
+      distance: adjustedSize,
       fillColor,
       borderColor,
       texture,
@@ -187,6 +232,13 @@ export async function placeZone(options = {}, hooks = {}) {
     console.warn("placeZone requires x,y coords for non-Lancer systems.");
     return null;
   }
+  // Register any pending function callbacks for the created template
+  if (template && pendingCallbacks.length > 0) {
+    for (const cb of pendingCallbacks) {
+      registerCallback(template.id, cb.trigger, cb.fn, cb.asGM);
+    }
+  }
+
   return template ? { x: template.x, y: template.y, template } : null;
 }
 
@@ -219,13 +271,54 @@ export async function placeZoneWithStatusEffect(options = {}, statusEffects = []
         const e = a.effects.find(x => x.statuses.has(s) && x.getFlag("templatemacro", "sourceTemplate") === tid);
         ${del ? 
           'if (e) await e.delete();' : 
-          'if (!e) { const d = CONFIG.statusEffects.find(x => x.id === s); if (d) await a.createEmbeddedDocuments("ActiveEffect", [{ ...d, statuses: [s], "flags.templatemacro.sourceTemplate": tid }]); }'
+          'if (!e) { const d = CONFIG.statusEffects.find(x => x.id === s); if (d) { const name = game.i18n.localize(d.name || d.label || s); await a.createEmbeddedDocuments("ActiveEffect", [{ ...d, name, statuses: [s], "flags.templatemacro.sourceTemplate": tid }]); } }'
+        }
+      }
+    }`;
+
+  const mkSceneCmd = (del) => `
+    const ef = ${JSON.stringify(statusEffects)};
+    const tid = template.id;
+    const api = game.modules.get('templatemacro').api;
+    if (!template.object) {
+      let retries = 0;
+      while (!template.object && retries < 10) {
+        await new Promise(r => setTimeout(r, 50));
+        retries++;
+      }
+    }
+    const contained = ${del} ? [] : api.findContained(template);
+    for (const tDoc of scene.tokens) {
+      if (!tDoc.actor) continue;
+      const a = tDoc.actor;
+      const isContained = contained.includes(tDoc.id);
+      for (const s of ef) {
+        const e = a.effects.find(x => x.statuses.has(s) && x.getFlag("templatemacro", "sourceTemplate") === tid);
+        if (e && (${del} || !isContained)) await e.delete();
+        else if (!e && !${del} && isContained) {
+          const d = CONFIG.statusEffects.find(x => x.id === s);
+          if (d) {
+            const name = game.i18n.localize(d.name || d.label || s);
+            await a.createEmbeddedDocuments("ActiveEffect", [{ ...d, name, statuses: [s], "flags.templatemacro.sourceTemplate": tid }]);
+          }
         }
       }
     }`;
 
   return await placeZone(options, {
     ...hooks,
+    created: {
+      command: (hooks.created?.command ? hooks.created.command + "\n" : "") + mkSceneCmd(false),
+      asGM: true
+    },
+    deleted: {
+      command: (hooks.deleted?.command ? hooks.deleted.command + "\n" : "") + mkSceneCmd(true),
+      asGM: true
+    },
+    moved: {
+      command: (hooks.moved?.command ? hooks.moved.command + "\n" : "") + mkSceneCmd(false),
+      asGM: true
+    },
     entered: {
       command: (hooks.entered?.command ? hooks.entered.command + "\n" : "") + mkCmd(false),
       asGM: true
@@ -364,10 +457,16 @@ export async function placeDifficultTerrainZone(options = {}, movementPenalty = 
   return result;
 }
 
+/**
+ * Build template macro flags from hooks, separating string commands from function callbacks.
+ * @param {Object} hooks - Hook definitions, each being { command, asGM } or { function, asGM }
+ * @returns {{ flags: Object, pendingCallbacks: Array<{trigger: string, fn: Function, asGM: boolean}> }}
+ */
 function _buildTemplateMacroFlags(hooks) {
-  if (!hooks || Object.keys(hooks).length === 0) return {};
+  if (!hooks || Object.keys(hooks).length === 0) return { flags: {}, pendingCallbacks: [] };
   
   const flags = { templatemacro: {} };
+  const pendingCallbacks = [];
   const map = {
     created: "whenCreated", deleted: "whenDeleted", moved: "whenMoved",
     hidden: "whenHidden", revealed: "whenRevealed", entered: "whenEntered",
@@ -377,9 +476,18 @@ function _buildTemplateMacroFlags(hooks) {
 
   for (const [k, c] of Object.entries(hooks)) {
     const t = map[k] || (Object.values(map).includes(k) ? k : null);
-    if (t && c.command) {
+    if (!t) continue;
+
+    // Function-based hook — queue for post-creation registration
+    if (typeof c.function === 'function') {
+      pendingCallbacks.push({ trigger: t, fn: c.function, asGM: c.asGM || false });
+    }
+
+    // String-based hook — store in flags as before
+    if (c.command) {
       flags.templatemacro[t] = { command: c.command, asGM: c.asGM || false };
     }
   }
-  return flags;
+  return { flags, pendingCallbacks };
 }
+

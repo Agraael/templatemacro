@@ -21,7 +21,7 @@ import {
   _updateTemplate,
   _updateToken
 } from "./scripts/hooks.mjs";
-import { callMacro } from "./scripts/templatemacro.mjs";
+import { callMacro, registerCallback, unregisterCallbacks } from "./scripts/templatemacro.mjs";
 import { registerPatternFillHooks, FILL_TYPES } from "./scripts/patternFill.mjs";
 
 class ZoneConfig extends FormApplication {
@@ -101,7 +101,9 @@ Hooks.once("setup", () => {
     placeZoneWithStatusEffect,
     placeDangerousZone,
     triggerDangerousZoneFlow,
-    placeDifficultTerrainZone
+    placeDifficultTerrainZone,
+    registerCallback,
+    unregisterCallbacks
   };
 
   MeasuredTemplateDocument.prototype.callMacro = async function(type = "never", options = {}) {
@@ -401,6 +403,15 @@ function _registerLancerSettings() {
     default: 1
   });
 
+  game.settings.register(MODULE, "centerLabelSize", {
+    name: "Center Label Font Size",
+    hint: "Font size (in pixels) of the text shown at the center of placement zones.",
+    scope: "world",
+    config: true,
+    type: Number,
+    default: 12
+  });
+
   game.settings.registerMenu(MODULE, "zoneConfig", {
     name: "Zone Configuration",
     label: "Configure Zones",
@@ -479,6 +490,10 @@ async function _showDangerousZoneDialog() {
       <div class="form-group">
         <label>Damage Value</label>
         <input type="number" name="damageValue" value="5"/>
+      </div>
+      <div class="form-group">
+        <label>Center Label</label>
+        <input type="text" name="centerLabel" value="" placeholder="Text shown in template center…"/>
       </div>
       <div class="form-group">
         <label>Fill Type</label>
@@ -569,6 +584,7 @@ async function _showDangerousZoneDialog() {
           const type = html.find('[name="type"]').val();
           const damageType = html.find('[name="damageType"]').val();
           const damageValue = parseInt(html.find('[name="damageValue"]').val()) || 5;
+          const centerLabel = html.find('[name="centerLabel"]').val().trim();
           const fillColor = html.find('[name="fillColor"]').val();
           const borderColor = html.find('[name="borderColor"]').val();
           const fillType = parseInt(html.find('[name="fillType"]').val());
@@ -581,10 +597,10 @@ async function _showDangerousZoneDialog() {
           const fillAnimationAngle = parseFloat(html.find('[name="fillAnimationAngle"]').val()) || 0;
           const fillPulse = html.find('[name="fillPulse"]').is(':checked');
           const fillPulseSpeed = parseFloat(html.find('[name="fillPulseSpeed"]').val()) || 1;
-          
+
           await placeDangerousZone({
             size, type, fillColor, borderColor, fillType, fillTexture, fillSize, fillOpacity, borderOpacity,
-            fillAnimation, fillAnimationSpeed, fillAnimationAngle, fillPulse, fillPulseSpeed
+            fillAnimation, fillAnimationSpeed, fillAnimationAngle, fillPulse, fillPulseSpeed, centerLabel
           }, damageType, damageValue);
         }
       },
@@ -638,6 +654,10 @@ async function _showStatusZoneDialog() {
         <select name="statusEffects" multiple size="8" style="width:100%">
           ${statusOptions}
         </select>
+      </div>
+      <div class="form-group">
+        <label>Center Label</label>
+        <input type="text" name="centerLabel" value="" placeholder="Text shown in template center…"/>
       </div>
       <div class="form-group">
         <label>Fill Type</label>
@@ -724,6 +744,7 @@ async function _showStatusZoneDialog() {
         icon: '<i class="fas fa-check"></i>',
         label: "Place",
         callback: async (html) => {
+          const centerLabel = html.find('[name="centerLabel"]').val().trim();
           const size = parseFloat(html.find('[name="size"]').val()) || 1;
           const type = html.find('[name="type"]').val();
           const selected = html.find('[name="statusEffects"]').val() || [];
@@ -744,7 +765,7 @@ async function _showStatusZoneDialog() {
 
           await placeZoneWithStatusEffect({
             size, type, fillColor, borderColor, fillType, fillTexture, fillSize, fillOpacity, borderOpacity,
-            fillAnimation, fillAnimationSpeed, fillAnimationAngle, fillPulse, fillPulseSpeed
+            fillAnimation, fillAnimationSpeed, fillAnimationAngle, fillPulse, fillPulseSpeed, centerLabel
           }, selected);
         }
       },
@@ -795,6 +816,10 @@ async function _showDifficultTerrainZoneDialog() {
       <div class="form-group">
         <label>Flat Penalty (adds cost; uncheck to multiply speed)</label>
         <input type="checkbox" name="isFlatPenalty" ${defaults.flatPenalty ? "checked" : ""}/>
+      </div>
+      <div class="form-group">
+        <label>Center Label</label>
+        <input type="text" name="centerLabel" value="" placeholder="Text shown in template center…"/>
       </div>
       <div class="form-group">
         <label>Fill Type</label>
@@ -885,6 +910,7 @@ async function _showDifficultTerrainZoneDialog() {
           const type = html.find('[name="type"]').val();
           const movementPenalty = parseInt(html.find('[name="movementPenalty"]').val()) || defaults.movementPenalty;
           const isFlatPenalty = html.find('[name="isFlatPenalty"]').is(':checked');
+          const centerLabel = html.find('[name="centerLabel"]').val().trim();
           const fillColor = html.find('[name="fillColor"]').val();
           const borderColor = html.find('[name="borderColor"]').val();
           const fillType = parseInt(html.find('[name="fillType"]').val());
@@ -900,7 +926,7 @@ async function _showDifficultTerrainZoneDialog() {
 
           await placeDifficultTerrainZone({
             size, type, fillColor, borderColor, fillType, fillTexture, fillSize, fillOpacity, borderOpacity,
-            fillAnimation, fillAnimationSpeed, fillAnimationAngle, fillPulse, fillPulseSpeed
+            fillAnimation, fillAnimationSpeed, fillAnimationAngle, fillPulse, fillPulseSpeed, centerLabel
           }, movementPenalty, isFlatPenalty);
         }
       },

@@ -5,6 +5,81 @@ export const FILL_TYPES = { NONE: 0, SOLID: 1, PATTERN: 2 };
 const textureCache = new Map();
 const animationState = new Map();
 
+// ---------------------------------------------------------------------------
+// Center label rendering
+// Text lives in a container added to canvas.interface.grid (GridLayer, zIndex 0
+// in InterfaceCanvasGroup) as a sibling AFTER the highlight sub-container.
+// This renders text above the fill highlights but below the TemplateLayer
+// (zIndex 400) which holds template borders, selection rings, etc.
+// Token images live in canvas.primary which is always below canvas.interface,
+// the same constraint that makes fill render above token images.
+// ---------------------------------------------------------------------------
+
+const centerLabelObjects = new Map(); // templateId → PreciseText (for delete cleanup)
+let _tmLabelLayer = null;
+
+function _ensureLabelLayer() {
+  if (_tmLabelLayer && !_tmLabelLayer.destroyed && _tmLabelLayer.parent) return _tmLabelLayer;
+  _tmLabelLayer = new PIXI.Container();
+  canvas.interface.grid.addChild(_tmLabelLayer);
+  return _tmLabelLayer;
+}
+
+function _refreshCenterLabel(template) {
+  const label = template.document.getFlag(MODULE, "centerLabel") ?? "";
+  const labelSize = game.settings.get(MODULE, "centerLabelSize") ?? 12;
+
+  if (!label) {
+    if (template._tmCenterLabel) {
+      template._tmCenterLabel.parent?.removeChild(template._tmCenterLabel);
+      template._tmCenterLabel.destroy();
+      template._tmCenterLabel = null;
+      centerLabelObjects.delete(template.id);
+    }
+    return;
+  }
+
+  if (!template._tmCenterLabel) {
+    const style = new PIXI.TextStyle({
+      fontFamily: "Arial",
+      fontSize: labelSize,
+      fontWeight: "bold",
+      fill: "#ffffff",
+      stroke: "#000000",
+      strokeThickness: 4,
+      align: "center",
+      dropShadow: false
+    });
+    template._tmCenterLabel = new PreciseText("", style);
+    template._tmCenterLabel.anchor.set(0.5, 0.5);
+    _ensureLabelLayer().addChild(template._tmCenterLabel);
+    centerLabelObjects.set(template.id, template._tmCenterLabel);
+    // Clean up when the template PIXI object is destroyed (e.g. drag preview teardown),
+    // which does not fire deleteMeasuredTemplate.
+    template.once("destroyed", () => {
+      const text = template._tmCenterLabel;
+      if (text && !text.destroyed) {
+        text.parent?.removeChild(text);
+        text.destroy();
+      }
+      template._tmCenterLabel = null;
+      centerLabelObjects.delete(template.id);
+      // Restore original's label now that the drag clone is gone.
+      if (template._original?._tmCenterLabel) {
+        template._original._tmCenterLabel.visible = true;
+      }
+    });
+  }
+
+  template._tmCenterLabel.style.fontSize = labelSize;
+  template._tmCenterLabel.text = label;
+  template._tmCenterLabel.position.set(template.document.x, template.document.y);
+  // If this is a drag clone, keep the original's label hidden for the duration of the drag.
+  if (template._original?._tmCenterLabel) {
+    template._original._tmCenterLabel.visible = false;
+  }
+}
+
 function startAnimation(template) {
   if (animationState.has(template.id)) return;
   const state = {
@@ -316,11 +391,19 @@ function onRenderMeasuredTemplateConfig(app, html, data) {
       </div>
     </div>`;
 
+  const currentCenterLabel = doc.getFlag(MODULE, "centerLabel") ?? "";
+  const centerLabelHtml = `
+    <div class="form-group">
+      <label>Center Label</label>
+      <input type="text" name="flags.templatemacro.centerLabel" value="${currentCenterLabel}" placeholder="Text shown in template center…">
+    </div>`;
+
   const fillColorField = html.find('[name="fillColor"]').closest(".form-group");
   if (fillColorField.length) {
+    fillColorField.before(centerLabelHtml);
     fillColorField.after(fillTypeHtml + patternOptionsHtml);
   } else {
-    html.find('[name="hidden"]').closest(".form-group").before(fillTypeHtml + patternOptionsHtml);
+    html.find('[name="hidden"]').closest(".form-group").before(centerLabelHtml + fillTypeHtml + patternOptionsHtml);
   }
 
   const togglePatternMode = (isPattern) => {
@@ -388,9 +471,25 @@ export function registerPatternFillHooks() {
       canvas.app.ticker.remove(state.tickBound);
       animationState.delete(doc.id);
     }
+    const text = centerLabelObjects.get(doc.id);
+    if (text) {
+      text.parent?.removeChild(text);
+      if (!text.destroyed) text.destroy();
+      centerLabelObjects.delete(doc.id);
+    }
+  });
+
+  Hooks.on("drawMeasuredTemplate", (template) => {
+    _refreshCenterLabel(template);
+  });
+
+  Hooks.on("refreshMeasuredTemplate", (template) => {
+    _refreshCenterLabel(template);
   });
 
   Hooks.on("canvasReady", async () => {
+    _tmLabelLayer = null;
+    centerLabelObjects.clear();
     const templates = canvas.templates?.placeables ?? [];
     const texturesToLoad = new Set([DEFAULT_PATTERN_TEXTURE]);
     
