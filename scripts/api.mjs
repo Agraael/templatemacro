@@ -2,47 +2,52 @@ import { MODULE } from "./constants.mjs";
 import { callMacro, registerCallback, unregisterCallbacks } from "./templatemacro.mjs";
 
 export function findGrids(A, B, templateDoc) {
-  const a = canvas.grid.getCenter(A.x, A.y);
-  const b = canvas.grid.getCenter(B.x, B.y);
-  const ray = new Ray({ x: a[0], y: a[1] }, { x: b[0], y: b[1] });
+  const a = canvas.grid.getCenterPoint({ x: A.x, y: A.y });
+  const b = canvas.grid.getCenterPoint({ x: B.x, y: B.y });
+  const ray = new Ray(a, b);
   if (ray.distance === 0) return [];
   
   const scene = templateDoc.parent;
   const gridCenter = scene.grid.size / 2;
   const locations = new Set();
   const spacer = scene.grid.type === CONST.GRID_TYPES.SQUARE ? 1.41 : 1;
-  const nMax = Math.max(Math.floor(ray.distance / (spacer * Math.min(canvas.grid.w, canvas.grid.h))), 1);
+  const nMax = Math.max(Math.floor(ray.distance / (spacer * Math.min(canvas.grid.sizeX, canvas.grid.sizeY))), 1);
   const tMax = Array.fromRange(nMax + 1).map(t => t / nMax);
   
   let prior = null;
   for (const [i, t] of tMax.entries()){
     const { x, y } = ray.project(t);
-    const [r1, c1] = canvas.grid.grid.getGridPositionFromPixels(x, y);
+    const offset1 = canvas.grid.getOffset({ x, y });
+    const r1 = offset1.i;
+    const c1 = offset1.j;
     if (i > 0) {
       const [r0, c0] = prior;
       if (r0 === r1 && c0 === c1) continue;
     }
-    
-    const [x1, y1] = canvas.grid.grid.getPixelsFromGridPosition(r1, c1);
+
+    const topLeft1 = canvas.grid.getTopLeftPoint(offset1);
     const contained = templateDoc.object.shape.contains(
-      x1 + gridCenter - templateDoc.object.center.x,
-      y1 + gridCenter - templateDoc.object.center.y
+      topLeft1.x + gridCenter - templateDoc.object.center.x,
+      topLeft1.y + gridCenter - templateDoc.object.center.y
     );
-    if (contained) locations.add({ x: x1, y: y1 });
-    
+    if (contained) locations.add({ x: topLeft1.x, y: topLeft1.y });
+
     prior = [r1, c1];
     if (i === 0) continue;
-    
-    if (!canvas.grid.isNeighbor(prior[0], prior[1], r1, c1)) {
+
+    if (!canvas.grid.testAdjacency(
+      { i: prior[0], j: prior[1] },
+      { i: r1, j: c1 }
+    )) {
       const th = tMax[i - 1] + (0.5 / nMax);
       const { x: xhp, y: yhp } = ray.project(th);
-      const [rh, ch] = canvas.grid.grid.getGridPositionFromPixels(xhp, yhp);
-      const [xh, yh] = canvas.grid.grid.getPixelsFromGridPosition(rh, ch);
+      const offsetH = canvas.grid.getOffset({ x: xhp, y: yhp });
+      const topLeftH = canvas.grid.getTopLeftPoint(offsetH);
       const containedHalf = templateDoc.object.shape.contains(
-        xh + gridCenter - templateDoc.object.center.x,
-        yh + gridCenter - templateDoc.object.center.y
+        topLeftH.x + gridCenter - templateDoc.object.center.x,
+        topLeftH.y + gridCenter - templateDoc.object.center.y
       );
-      if (containedHalf) locations.add({ x: xh, y: yh });
+      if (containedHalf) locations.add({ x: topLeftH.x, y: topLeftH.y });
     }
   }
   return [...locations];
