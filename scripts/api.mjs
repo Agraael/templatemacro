@@ -191,7 +191,16 @@ export async function placeZone(options = {}, hooks = {}) {
   if (game.system.id === "lancer" && game.lancer?.canvas?.WeaponRangeTemplate) {
     try {
       const templatePreview = game.lancer.canvas.WeaponRangeTemplate.fromRange({ type, val: Math.max(adjustedSize, 0) });
-      template = await templatePreview.placeTemplate();
+
+      if (x !== undefined && y !== undefined) {
+        // Direct placement at specified coordinates — same structure as interactive, no click required
+        const baseData = templatePreview.document?.toObject() ?? {};
+        const [created] = await canvas.scene.createEmbeddedDocuments("MeasuredTemplate", [{ ...baseData, x, y, user: game.user.id }]);
+        template = created ?? null;
+      } else {
+        template = await templatePreview.placeTemplate();
+      }
+
       if (template) {
         await template.update({
           fillColor,
@@ -207,7 +216,7 @@ export async function placeZone(options = {}, hooks = {}) {
           }
         });
         await template.update({ "flags.tokenmagic.templateData.opacity": 0 });
-        
+
         // Manually trigger whenCreated for Lancer because initial placement doesn't have flags
         if (flags.templatemacro?.whenCreated) {
           const { id: gmId } = game.users.find(u => u.active && u.isGM) ?? {};
@@ -494,5 +503,27 @@ function _buildTemplateMacroFlags(hooks) {
     }
   }
   return { flags, pendingCallbacks };
+}
+
+/**
+ * Attach a MeasuredTemplate to a token so it moves with the token.
+ * Sets flags.templatemacro.attachedTokenId on the template document.
+ * Accepts a MeasuredTemplateDocument directly, or a placeZone result object { template }.
+ * @param {MeasuredTemplateDocument|{template: MeasuredTemplateDocument}} templateOrResult
+ * @param {TokenDocument} tokenDoc
+ */
+export async function attachTemplateToToken(templateOrResult, tokenDoc) {
+  const doc = templateOrResult?.template ?? templateOrResult;
+  await doc.setFlag(MODULE, "attachedTokenId", tokenDoc.id);
+}
+
+/**
+ * Detach a MeasuredTemplate from its token (removes the attachment flag).
+ * Accepts a MeasuredTemplateDocument directly, or a placeZone result object { template }.
+ * @param {MeasuredTemplateDocument|{template: MeasuredTemplateDocument}} templateOrResult
+ */
+export async function detachTemplateFromToken(templateOrResult) {
+  const doc = templateOrResult?.template ?? templateOrResult;
+  await doc.unsetFlag(MODULE, "attachedTokenId");
 }
 

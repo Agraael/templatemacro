@@ -6,7 +6,9 @@ import {
   placeZoneWithStatusEffect,
   placeDangerousZone,
   triggerDangerousZoneFlow,
-  placeDifficultTerrainZone
+  placeDifficultTerrainZone,
+  attachTemplateToToken,
+  detachTemplateFromToken
 } from "./scripts/api.mjs";
 import { MODULE } from "./scripts/constants.mjs";
 import {
@@ -103,7 +105,9 @@ Hooks.once("setup", () => {
     triggerDangerousZoneFlow,
     placeDifficultTerrainZone,
     registerCallback,
-    unregisterCallbacks
+    unregisterCallbacks,
+    attachTemplateToToken,
+    detachTemplateFromToken
   };
 
   MeasuredTemplateDocument.prototype.callMacro = async function(type = "never", options = {}) {

@@ -39,6 +39,20 @@ export async function _updateToken(tokenDoc, update, context, userId) {
   if (!hasX && !hasY) return;
 
   await CanvasAnimation.getAnimation(tokenDoc.object.animationName)?.promise;
+
+  // Move any templates attached to this token by the same delta.
+  const previousCoords2 = foundry.utils.getProperty(context, `${MODULE}.coords.previous`);
+  if (previousCoords2) {
+    const dx = tokenDoc.x - previousCoords2.x;
+    const dy = tokenDoc.y - previousCoords2.y;
+    if (dx !== 0 || dy !== 0) {
+      const attached = tokenDoc.parent.templates.filter(t => t.getFlag(MODULE, "attachedTokenId") === tokenDoc.id);
+      if (attached.length > 0) {
+        const updates = attached.map(t => ({ _id: t.id, x: t.x + dx, y: t.y + dy }));
+        await tokenDoc.parent.updateEmbeddedDocuments("MeasuredTemplate", updates);
+      }
+    }
+  }
   const coords = {
     x: tokenDoc.x,
     y: tokenDoc.y
