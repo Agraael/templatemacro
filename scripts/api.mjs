@@ -492,9 +492,16 @@ function _buildTemplateMacroFlags(hooks) {
     const t = map[k] || (Object.values(map).includes(k) ? k : null);
     if (!t) continue;
 
-    // Function-based hook — queue for post-creation registration
+    // Function-based hook — register in-memory AND persist as flag command
     if (typeof c.function === 'function') {
       pendingCallbacks.push({ trigger: t, fn: c.function, asGM: c.asGM || false });
+      // Extract function body and store as a persistent string command so it
+      // survives page reloads (the runtime callback is in-memory only).
+      if (!c.command) {
+        const fnStr = c.function.toString();
+        const body = fnStr.replace(/^(?:async\s+)?function[^(]*\([^)]*\)\s*\{/, '').replace(/\}$/, '');
+        flags.templatemacro[t] = { command: body, asGM: c.asGM || false };
+      }
     }
 
     // String-based hook — store in flags as before
