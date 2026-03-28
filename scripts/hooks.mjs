@@ -38,6 +38,9 @@ export async function _updateToken(tokenDoc, update, context, userId) {
   const hasY = foundry.utils.hasProperty(update, "y");
   if (!hasX && !hasY) return;
 
+  // Skip intermediate ruler segments — only process the final one
+  if (context.rulerSegment && !context.lastRulerSegment) return;
+
   await CanvasAnimation.getAnimation(tokenDoc.object.animationName)?.promise;
 
   // Move any templates attached to this token by the same delta.
@@ -65,7 +68,11 @@ export async function _updateToken(tokenDoc, update, context, userId) {
     return user.active && user.isGM;
   }) ?? {};
   // those you are in now and were in before (and might still be in).
-  const current = findContainers(tokenDoc);
+  // Use update coordinates when available (ruler segments may not have synced tokenDoc.x/y yet)
+  const finalPos = (update.x !== undefined || update.y !== undefined)
+    ? { x: update.x ?? tokenDoc.x, y: update.y ?? tokenDoc.y }
+    : null;
+  const current = findContainers(tokenDoc, finalPos);
   const previous = foundry.utils.getProperty(context, `${MODULE}.wasIn`) ?? [];
   // those you have left, have entered, and have stayed in.
   const leaving = previous.filter(p => !current.includes(p));

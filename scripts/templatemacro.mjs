@@ -61,7 +61,9 @@ export function callMacro(templateDoc, whenWhat, context) {
     } catch (e) {
       console.error(`templatemacro | Error in registered callback for ${whenWhat} on template ${templateDoc.id}:`, e);
     }
-    // Don't return — also run the flag-based command if it exists (they stack)
+    // Runtime callback handled it — skip the flag-based command (which is the
+    // auto-persisted copy of this same function, used only after page reload).
+    return;
   }
 
   // Fall back to flag-based string commands

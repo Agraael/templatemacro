@@ -77,9 +77,11 @@ export function findContained(templateDoc) {
   return [...contained];
 }
 
-export function findContainers(tokenDoc) {
+export function findContainers(tokenDoc, overridePos = null) {
   const { size } = tokenDoc.parent.grid;
-  const { width, height, x: tokx, y: toky } = tokenDoc;
+  const { width, height } = tokenDoc;
+  const tokx = overridePos?.x ?? tokenDoc.x;
+  const toky = overridePos?.y ?? tokenDoc.y;
   const containers = new Set();
   
   for (const templateDoc of tokenDoc.parent.templates) {
@@ -87,7 +89,7 @@ export function findContainers(tokenDoc) {
     if (!object?.shape) continue;
     const startX = width >= 1 ? 0.5 : width / 2;
     const startY = height >= 1 ? 0.5 : height / 2;
-    
+
     for (let x = startX; x < width; x++) {
       for (let y = startY; y < height; y++) {
         const contains = object.shape.contains(tokx + x * size - tempx, toky + y * size - tempy);
@@ -154,6 +156,19 @@ export async function placeZone(options = {}, hooks = {}) {
     return await placeDifficultTerrainZone({ ...options, difficultTerrain: null }, options.difficultTerrain.movementPenalty, options.difficultTerrain.isFlatPenalty, hooks);
   }
 
+  // Apply status zone visual defaults so all zones share the same base look
+  const _zoneDefaults = {
+    fillType: game.settings.get("templatemacro", "statusZoneDefaultFillType"),
+    fillTexture: game.settings.get("templatemacro", "statusZoneDefaultTexture"),
+    fillOpacity: game.settings.get("templatemacro", "statusZoneDefaultFillOpacity"),
+    fillAnimation: game.settings.get("templatemacro", "statusZoneDefaultAnimation"),
+    fillPulse: game.settings.get("templatemacro", "statusZoneDefaultFillPulse"),
+    borderOpacity: game.settings.get("templatemacro", "statusZoneDefaultBorderOpacity"),
+    fillAnimationSpeed: game.settings.get("templatemacro", "statusZoneDefaultFillAnimationSpeed"),
+    fillAnimationAngle: game.settings.get("templatemacro", "statusZoneDefaultFillAnimationAngle"),
+    fillPulseSpeed: game.settings.get("templatemacro", "statusZoneDefaultFillPulseSpeed")
+  };
+  const _merged = { ..._zoneDefaults, ...options };
   const {
     x, y,
     size = 1,
@@ -172,7 +187,7 @@ export async function placeZone(options = {}, hooks = {}) {
     fillPulse = false,
     fillPulseSpeed = 1,
     centerLabel = ""
-  } = options;
+  } = _merged;
 
   let adjustedSize = size;
   if (game.system.id === "lancer" && [2, 3, 4, 5].includes(canvas.grid.type)) {
@@ -478,7 +493,50 @@ export async function placeDifficultTerrainZone(options = {}, movementPenalty = 
  */
 function _buildTemplateMacroFlags(hooks) {
   if (!hooks || Object.keys(hooks).length === 0) return { flags: {}, pendingCallbacks: [] };
-  
+
+  // Expand onInside/onLeave shortcuts into individual hooks
+  if (hooks.onInside) {
+    const insideFn = hooks.onInside;
+    const asGM = insideFn.asGM ?? true;
+    const hookDef = typeof insideFn.function === 'function'
+      ? { function: insideFn.function, asGM }
+      : (insideFn.command ? { command: insideFn.command, asGM } : { function: insideFn, asGM });
+    // Build a created/moved wrapper that scans all contained tokens
+    const wrapForScan = (innerFn) => {
+      return async function (templateDoc, scene) {
+        const tmApi = game.modules.get('templatemacro')?.api;
+        if (!tmApi?.findContained) return;
+        let retries = 0;
+        while (!templateDoc.object && retries < 10) { await new Promise(r => setTimeout(r, 50)); retries++; }
+        const containedIds = tmApi.findContained(templateDoc);
+        for (const tokenId of containedIds) {
+          const tokenDoc = scene.tokens.get(tokenId);
+          const token = tokenDoc?.object;
+          if (token) await innerFn(templateDoc, scene, token);
+        }
+      };
+    };
+    if (typeof hookDef.function === 'function') {
+      if (!hooks.created) hooks.created = { function: wrapForScan(hookDef.function), asGM };
+      if (!hooks.moved) hooks.moved = { function: wrapForScan(hookDef.function), asGM };
+      if (!hooks.entered) hooks.entered = hookDef;
+    } else if (hookDef.command) {
+      if (!hooks.entered) hooks.entered = hookDef;
+      // For command-based, created/moved need a scene-scan wrapper (similar to statusEffects pattern)
+    }
+    delete hooks.onInside;
+  }
+  if (hooks.onLeave) {
+    const leaveFn = hooks.onLeave;
+    const asGM = leaveFn.asGM ?? true;
+    if (!hooks.left) {
+      hooks.left = typeof leaveFn.function === 'function'
+        ? { function: leaveFn.function, asGM }
+        : (leaveFn.command ? { command: leaveFn.command, asGM } : { function: leaveFn, asGM });
+    }
+    delete hooks.onLeave;
+  }
+
   const flags = { templatemacro: {} };
   const pendingCallbacks = [];
   const map = {
