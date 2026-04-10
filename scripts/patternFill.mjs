@@ -190,17 +190,29 @@ function drawSolidFallback(template, config) {
   const highlightLayer = canvas.interface.grid.getHighlightLayer(template.highlightId);
   if (!highlightLayer) return;
 
-  const grid = canvas.grid;
-  const positions = template._getGridHighlightPositions();
   const fillColor = Color.from(config.fillColor);
   const borderColor = Color.from(doc.borderColor ?? "#000000");
+
+  // Gridless: draw directly on the template shape.
+  if (canvas.grid.type === CONST.GRID_TYPES.GRIDLESS) {
+    const shape = template._getGridHighlightShape?.() ?? template.shape;
+    if (!shape) return;
+    highlightLayer.beginFill(fillColor, config.fillOpacity * 0.5);
+    highlightLayer.lineStyle(2, borderColor, config.borderOpacity);
+    highlightLayer.drawShape(shape);
+    highlightLayer.endFill();
+    return;
+  }
+
+  const grid = canvas.grid;
+  const positions = template._getGridHighlightPositions();
 
   for (const { x, y } of positions) {
     const cx = x + (grid.sizeX / 2);
     const cy = y + (grid.sizeY / 2);
     const points = grid.getShape();
     for (const point of points) { point.x += cx; point.y += cy; }
-    
+
     const shape = new PIXI.Polygon(points);
     highlightLayer.beginFill(fillColor, config.fillOpacity * 0.5);
     highlightLayer.drawShape(shape);
@@ -214,6 +226,49 @@ function drawSolidFallback(template, config) {
     const points = grid.getShape();
     for (const point of points) { point.x += cx; point.y += cy; }
   }
+}
+
+// Cache for hex geometry (shapes + edge map). Rebuilt only when template moves/resizes.
+const _geometryCache = new Map();
+
+function _buildGeometry(template) {
+  const grid = canvas.grid;
+  const positions = template._getGridHighlightPositions();
+  const edgeCount = new Map();
+  const hexShapes = [];
+
+  for (const { x, y } of positions) {
+    const cx = x + (grid.sizeX / 2);
+    const cy = y + (grid.sizeY / 2);
+    const points = grid.getShape();
+    for (const point of points) { point.x += cx; point.y += cy; }
+
+    const shape = new PIXI.Polygon(points);
+    hexShapes.push({ shape, points });
+
+    for (let i = 0; i < points.length; i++) {
+      const p1 = points[i];
+      const p2 = points[(i + 1) % points.length];
+      const x1 = Math.round(p1.x * 10) / 10;
+      const y1 = Math.round(p1.y * 10) / 10;
+      const x2 = Math.round(p2.x * 10) / 10;
+      const y2 = Math.round(p2.y * 10) / 10;
+      const edgeKey = `${Math.min(x1, x2)},${Math.min(y1, y2)}-${Math.max(x1, x2)},${Math.max(y1, y2)}`;
+      edgeCount.set(edgeKey, (edgeCount.get(edgeKey) || 0) + 1);
+    }
+  }
+  return { hexShapes, edgeCount };
+}
+
+function _getCachedGeometry(template) {
+  const doc = template.document;
+  const key = `${doc.x},${doc.y},${doc.distance},${doc.direction},${doc.angle},${doc.t}`;
+  const cached = _geometryCache.get(template.id);
+  if (cached && cached.key === key) return cached;
+  const geom = _buildGeometry(template);
+  geom.key = key;
+  _geometryCache.set(template.id, geom);
+  return geom;
 }
 
 function highlightGridWithPattern(template) {
@@ -238,11 +293,9 @@ function highlightGridWithPattern(template) {
     return;
   }
 
-  const grid = canvas.grid;
-  const positions = template._getGridHighlightPositions();
   const fillColor = Color.from(config.fillColor);
   const { x: scaleX, y: scaleY } = config.fillTextureScale;
-  
+
   const animOffset = getAnimationOffset(template.id);
   const finalOffsetX = (config.fillTextureOffset?.x ?? 0) + animOffset.x;
   const finalOffsetY = (config.fillTextureOffset?.y ?? 0) + animOffset.y;
@@ -255,38 +308,24 @@ function highlightGridWithPattern(template) {
 
   const borderColor = Color.from(doc.borderColor ?? "#000000");
   const fillOpacity = config.fillPulse ? getPulsedFillOpacity(template.id, config.fillOpacity) : config.fillOpacity;
+  const fillMatrix = new PIXI.Matrix(scaleX / 100, 0, 0, scaleY / 100, finalOffsetX, finalOffsetY);
 
-  const edgeCount = new Map();
-  const hexShapes = [];
-
-  for (const { x, y } of positions) {
-    const cx = x + (grid.sizeX / 2);
-    const cy = y + (grid.sizeY / 2);
-    const points = grid.getShape();
-    for (const point of points) { point.x += cx; point.y += cy; }
-    
-    const shape = new PIXI.Polygon(points);
-    hexShapes.push({ shape, points });
-
-    for (let i = 0; i < points.length; i++) {
-      const p1 = points[i];
-      const p2 = points[(i + 1) % points.length];
-      const x1 = Math.round(p1.x * 10) / 10;
-      const y1 = Math.round(p1.y * 10) / 10;
-      const x2 = Math.round(p2.x * 10) / 10;
-      const y2 = Math.round(p2.y * 10) / 10;
-      const edgeKey = `${Math.min(x1, x2)},${Math.min(y1, y2)}-${Math.max(x1, x2)},${Math.max(y1, y2)}`;
-      edgeCount.set(edgeKey, (edgeCount.get(edgeKey) || 0) + 1);
-    }
+  // Gridless: draw directly on the template shape instead of per-cell.
+  if (canvas.grid.type === CONST.GRID_TYPES.GRIDLESS) {
+    const shape = template._getGridHighlightShape?.() ?? template.shape;
+    if (!shape) return;
+    highlightLayer.beginTextureFill({ texture, color: fillColor, alpha: fillOpacity, matrix: fillMatrix });
+    highlightLayer.lineStyle(2, borderColor, config.borderOpacity);
+    highlightLayer.drawShape(shape);
+    highlightLayer.endFill();
+    return;
   }
 
+  // Grid: draw per-cell with cached geometry.
+  const { hexShapes, edgeCount } = _getCachedGeometry(template);
+
   for (const { shape } of hexShapes) {
-    highlightLayer.beginTextureFill({
-      texture,
-      color: fillColor,
-      alpha: fillOpacity,
-      matrix: new PIXI.Matrix(scaleX / 100, 0, 0, scaleY / 100, finalOffsetX, finalOffsetY)
-    });
+    highlightLayer.beginTextureFill({ texture, color: fillColor, alpha: fillOpacity, matrix: fillMatrix });
     highlightLayer.drawShape(shape);
     highlightLayer.endFill();
   }
@@ -301,7 +340,7 @@ function highlightGridWithPattern(template) {
       const x2 = Math.round(p2.x * 10) / 10;
       const y2 = Math.round(p2.y * 10) / 10;
       const edgeKey = `${Math.min(x1, x2)},${Math.min(y1, y2)}-${Math.max(x1, x2)},${Math.max(y1, y2)}`;
-      
+
       if (edgeCount.get(edgeKey) === 1) {
         highlightLayer.moveTo(p1.x, p1.y);
         highlightLayer.lineTo(p2.x, p2.y);
@@ -466,6 +505,7 @@ export function registerPatternFillHooks() {
   });
 
   Hooks.on("deleteMeasuredTemplate", (doc) => {
+    _geometryCache.delete(doc.id);
     const state = animationState.get(doc.id);
     if (state) {
       canvas.app.ticker.remove(state.tickBound);
@@ -490,6 +530,7 @@ export function registerPatternFillHooks() {
   Hooks.on("canvasReady", async () => {
     _tmLabelLayer = null;
     centerLabelObjects.clear();
+    _geometryCache.clear();
     const templates = canvas.templates?.placeables ?? [];
     const texturesToLoad = new Set([DEFAULT_PATTERN_TEXTURE]);
     
