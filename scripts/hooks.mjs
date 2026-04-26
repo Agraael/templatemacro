@@ -41,16 +41,37 @@ export async function _updateToken(tokenDoc, update, context, userId) {
   // Skip intermediate ruler segments — only process the final one
   if (context.rulerSegment && !context.lastRulerSegment) return;
 
-  await CanvasAnimation.getAnimation(tokenDoc.object.animationName)?.promise;
-
   // Move any templates attached to this token by the same delta.
   const previousCoords2 = foundry.utils.getProperty(context, `${MODULE}.coords.previous`);
   if (previousCoords2) {
-    const dx = tokenDoc.x - previousCoords2.x;
-    const dy = tokenDoc.y - previousCoords2.y;
+    // Use update data for target coords — tokenDoc.x/y is unreliable during animation
+    const targetX = update.x ?? previousCoords2.x;
+    const targetY = update.y ?? previousCoords2.y;
+    const dx = targetX - previousCoords2.x;
+    const dy = targetY - previousCoords2.y;
     if (dx !== 0 || dy !== 0) {
       const attached = tokenDoc.parent.templates.filter(t => t.getFlag(MODULE, "attachedTokenId") === tokenDoc.id);
       if (attached.length > 0) {
+        const token = tokenDoc.object;
+
+        // Visually follow the token's slide animation frame by frame
+        const anim = CanvasAnimation.getAnimation(token?.animationName);
+        if (anim && token && anim.state !== -1) {
+          const startPositions = attached.map(t => ({ id: t.id, x: t.x, y: t.y }));
+          const tickFn = () => {
+            const currentDx = token.document.x - previousCoords2.x;
+            const currentDy = token.document.y - previousCoords2.y;
+            for (const sp of startPositions) {
+              const tObj = canvas.templates.get(sp.id)?.object;
+              if (tObj) tObj.position.set(sp.x + currentDx, sp.y + currentDy);
+            }
+          };
+          canvas.app.ticker.add(tickFn);
+          await anim.promise;
+          canvas.app.ticker.remove(tickFn);
+        }
+
+        // Persist final positions using the known delta from update data
         const updates = attached.map(t => ({ _id: t.id, x: t.x + dx, y: t.y + dy }));
         await tokenDoc.parent.updateEmbeddedDocuments("MeasuredTemplate", updates);
       }

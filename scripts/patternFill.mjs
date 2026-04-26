@@ -437,12 +437,30 @@ function onRenderMeasuredTemplateConfig(app, html, data) {
       <input type="text" name="flags.templatemacro.centerLabel" value="${currentCenterLabel}" placeholder="Text shown in template center…">
     </div>`;
 
+  // "Attach to Token" selector
+  const currentAttachId = doc.getFlag(MODULE, "attachedTokenId") ?? "";
+  const sceneTokens = doc.parent?.tokens?.contents ?? [];
+  const tokenOptions = sceneTokens.map(t =>
+    `<option value="${t.id}" ${t.id === currentAttachId ? "selected" : ""}>${t.name}</option>`
+  ).join("");
+  const attachHtml = `
+    <div class="form-group">
+      <label>Attached To</label>
+      <select name="flags.templatemacro.attachedTokenId">
+        <option value="">None</option>
+        ${tokenOptions}
+      </select>
+    </div>`;
+
+  const hiddenField = html.find('[name="hidden"]').closest(".form-group");
+  hiddenField.after(attachHtml);
+
   const fillColorField = html.find('[name="fillColor"]').closest(".form-group");
   if (fillColorField.length) {
     fillColorField.before(centerLabelHtml);
     fillColorField.after(fillTypeHtml + patternOptionsHtml);
   } else {
-    html.find('[name="hidden"]').closest(".form-group").before(centerLabelHtml + fillTypeHtml + patternOptionsHtml);
+    hiddenField.before(centerLabelHtml + fillTypeHtml + patternOptionsHtml);
   }
 
   const togglePatternMode = (isPattern) => {
@@ -470,6 +488,15 @@ function onRenderMeasuredTemplateConfig(app, html, data) {
   html.find('input[type="range"]').on('input', function() {
     $(this).siblings('.range-value').text(this.value);
   });
+
+  // Convert empty attachedTokenId to null so the flag gets unset
+  const origUpdateObject = app._updateObject.bind(app);
+  app._updateObject = async function(event, formData) {
+    if (formData["flags.templatemacro.attachedTokenId"] === "") {
+      formData["flags.templatemacro.attachedTokenId"] = null;
+    }
+    return origUpdateObject(event, formData);
+  };
 
   html.find('.file-picker').on('click', async function(event) {
     event.preventDefault();
