@@ -360,6 +360,10 @@ export async function placeZoneWithStatusEffect(options = {}, statusEffects = []
 }
 
 export async function triggerDangerousZoneFlow(token, damageType = "kinetic", damageValue = 5) {
+  const laApi = game.modules.get("lancer-automations")?.api;
+  if (laApi?.triggerDangerousZoneFlow)
+    return laApi.triggerDangerousZoneFlow(token, damageType, damageValue);
+
   if (!token?.actor) return;
   const actor = token.actor;
   const curRound = game.combat?.round || 0;
