@@ -1,0 +1,118 @@
+<div class="tmac-lib-root">
+  <nav class="tmac-lib-tabs">
+    <a data-tmac-lib-tab="presets" class="{{#if isPresetsTab}}active{{/if}}">Presets</a>
+    <a data-tmac-lib-tab="spawn" class="{{#if isSpawnTab}}active{{/if}}">Templates</a>
+  </nav>
+
+  {{#if isPresetsTab}}
+    <p class="hint">Click to activate a preset, then draw with the standard template tools.</p>
+    {{#if isGM}}
+    <div class="tmac-lib-toolbar tmac-lib-toolbar-icons">
+      <button type="button" data-tmac-lib-paste title="Import a single preset from JSON"><i class="fa-solid fa-paste"></i></button>
+      <button type="button" data-tmac-lib-import title="Import library from file"><i class="fa-solid fa-file-import"></i></button>
+      <button type="button" data-tmac-lib-export title="Export library to file"><i class="fa-solid fa-file-export"></i></button>
+    </div>
+    {{/if}}
+    {{#if hasActive}}
+    <div class="tmac-lib-active-banner">
+      <i class="fa-solid fa-bolt"></i>
+      Preset active.
+      <button type="button" data-tmac-lib-clear title="Clear"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    {{/if}}
+    <ul class="tmac-lib-list">
+      {{#each presets}}
+      <li class="tmac-lib-card {{#if isActive}}active{{/if}}" style="--zone-color: {{zoneColor}};" data-tmac-lib-select="{{id}}">
+        <div class="tmac-lib-card-icon">
+          {{#if iconIsFa}}
+            <i class="fa-solid {{icon}}"></i>
+          {{else}}
+            {{#if iconIsSvg}}
+              <span class="tmac-lib-svg-tint" style="--mask-url: url('{{iconUrl}}'); --tint: {{zoneColor}};"></span>
+            {{else}}
+              <img src="{{iconUrl}}" alt="">
+            {{/if}}
+          {{/if}}
+        </div>
+        <div class="tmac-lib-card-info">
+          <div class="tmac-lib-card-name">
+            {{name}}
+            {{#if protected}}<i class="fa-solid fa-lock tmac-lib-protected-icon" title="Default entry, cannot be deleted"></i>{{/if}}
+          </div>
+          <div class="tmac-lib-card-meta">
+            <span class="tmac-lib-zone">{{zoneLabel}}</span>
+          </div>
+        </div>
+        {{#if @root.isGM}}
+        <div class="tmac-lib-card-actions">
+          <button type="button" data-tmac-lib-edit="{{id}}" title="Edit"><i class="fa-solid fa-pen"></i></button>
+          <button type="button" data-tmac-lib-clone="{{id}}" title="Duplicate"><i class="fa-solid fa-clone"></i></button>
+          <button type="button" data-tmac-lib-entry-export="{{id}}" title="Export"><i class="fa-solid fa-file-export"></i></button>
+          {{#unless protected}}<button type="button" data-tmac-lib-delete="{{id}}" title="Delete"><i class="fa-solid fa-trash"></i></button>{{/unless}}
+        </div>
+        {{/if}}
+      </li>
+      {{/each}}
+    </ul>
+    {{#unless presets.length}}
+      <p class="hint" style="text-align: center; padding: 16px;">No presets.</p>
+    {{/unless}}
+    {{#if isGM}}
+    <button type="button" data-tmac-lib-add class="tmac-lib-add">
+      <i class="fa-solid fa-plus"></i> Add Preset
+    </button>
+    {{/if}}
+  {{/if}}
+
+  {{#if isSpawnTab}}
+    <p class="hint">Click to spawn a template at the entry's size and shape.</p>
+    {{#if isGM}}
+    <div class="tmac-lib-toolbar tmac-lib-toolbar-icons">
+      <button type="button" data-tmac-spawn-paste title="Import a single template from JSON"><i class="fa-solid fa-paste"></i></button>
+      <button type="button" data-tmac-spawn-import title="Import library from file"><i class="fa-solid fa-file-import"></i></button>
+      <button type="button" data-tmac-spawn-export title="Export library to file"><i class="fa-solid fa-file-export"></i></button>
+    </div>
+    {{/if}}
+    <ul class="tmac-lib-list">
+      {{#each spawns}}
+      <li class="tmac-lib-card" style="--zone-color: {{zoneColor}};" data-tmac-spawn-select="{{id}}">
+        <div class="tmac-lib-card-icon">
+          {{#if iconIsFa}}
+            <i class="fa-solid {{icon}}"></i>
+          {{else}}
+            {{#if iconIsSvg}}
+              <span class="tmac-lib-svg-tint" style="--mask-url: url('{{iconUrl}}'); --tint: {{zoneColor}};"></span>
+            {{else}}
+              <img src="{{iconUrl}}" alt="">
+            {{/if}}
+          {{/if}}
+        </div>
+        <div class="tmac-lib-card-info">
+          <div class="tmac-lib-card-name">{{name}}</div>
+          <div class="tmac-lib-card-meta">
+            <span class="tmac-lib-zone">{{templateType}}</span>
+            <span class="tmac-lib-size">size {{size}}</span>
+          </div>
+        </div>
+        {{#if @root.isGM}}
+        <div class="tmac-lib-card-actions">
+          <button type="button" data-tmac-spawn-edit="{{id}}" title="Edit"><i class="fa-solid fa-pen"></i></button>
+          <button type="button" data-tmac-spawn-clone="{{id}}" title="Duplicate"><i class="fa-solid fa-clone"></i></button>
+          <button type="button" data-tmac-spawn-entry-export="{{id}}" title="Export"><i class="fa-solid fa-file-export"></i></button>
+          <button type="button" data-tmac-spawn-delete="{{id}}" title="Delete"><i class="fa-solid fa-trash"></i></button>
+        </div>
+        {{/if}}
+      </li>
+      {{/each}}
+    </ul>
+    {{#unless spawns.length}}
+      <p class="hint" style="text-align: center; padding: 16px;">No spawn templates.</p>
+    {{/unless}}
+    {{#if isGM}}
+    <button type="button" data-tmac-spawn-add class="tmac-lib-add">
+      <i class="fa-solid fa-plus"></i> Add Template
+    </button>
+    {{/if}}
+  {{/if}}
+</div>
+

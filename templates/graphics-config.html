@@ -1,0 +1,453 @@
+<div class="tmac-graphics-root">
+  {{#if showEntryHeader}}
+  <div class="tmac-entry-header">
+    <div class="form-group tmac-row">
+      <label>Name</label>
+      <input type="text" name="entryName" value="{{state.entryName}}">
+    </div>
+    <div class="form-group tmac-row">
+      <label>Icon</label>
+      <input type="text" name="entryIcon" value="{{state.entryIcon}}" placeholder="fa-radiation or modules/.../icon.svg">
+      <button type="button" class="tmac-entry-pick-icon" title="Browse"><i class="fa-solid fa-file-import"></i></button>
+    </div>
+  </div>
+  {{/if}}
+  <div class="tmac-mode-banner {{#if state.useCustomRender}}on{{/if}}">
+    <label>
+      <input type="checkbox" name="useCustomRender" {{#if state.useCustomRender}}checked{{/if}}>
+      <i class="fa-solid fa-wand-magic-sparkles"></i>
+      TemplateMacro Advanced Mode
+    </label>
+    <p class="hint">Enables the full templateMacro feature set: dashed/animated borders, color and texture animation, inner-circle hole, elevation-aware cell culling.</p>
+  </div>
+  <div class="tmac-config-body">
+    <nav class="tmac-vertical-tabs">
+      {{#if showTemplate}}
+      <a data-tmac-tab="template"><i class="fa-solid fa-shapes"></i><span>Template</span></a>
+      {{/if}}
+      <a data-tmac-tab="geometry" class="{{#unless state.useCustomRender}}tmac-tab-inactive{{/unless}}" title="{{#unless state.useCustomRender}}Only applied when Advanced Mode is enabled{{/unless}}"><i class="fa-solid fa-ruler-combined"></i><span>Geometry</span></a>
+      <a data-tmac-tab="border" class="{{#unless state.useCustomRender}}tmac-tab-inactive{{/unless}}" title="{{#unless state.useCustomRender}}Only applied when Advanced Mode is enabled{{/unless}}"><i class="fa-solid fa-border-all"></i><span>Border</span></a>
+      <a data-tmac-tab="fill" class="{{#unless state.useCustomRender}}tmac-tab-inactive{{/unless}}" title="{{#unless state.useCustomRender}}Only applied when Advanced Mode is enabled{{/unless}}"><i class="fa-solid fa-fill-drip"></i><span>Fill</span></a>
+      <a data-tmac-tab="label" class="{{#unless state.useCustomRender}}tmac-tab-inactive{{/unless}}" title="{{#unless state.useCustomRender}}Only applied when Advanced Mode is enabled{{/unless}}"><i class="fa-solid fa-font"></i><span>Label</span></a>
+      <a data-tmac-tab="misc"><i class="fa-solid fa-layer-group"></i><span>Misc</span></a>
+      {{#if showMacros}}
+      <a data-tmac-tab="macros"><i class="fa-solid fa-code"></i><span>Macros</span></a>
+      {{/if}}
+    </nav>
+
+    <div class="tmac-tab-content">
+
+      {{#if showTemplate}}
+      <section data-tmac-pane="template">
+        <div class="form-group tmac-row">
+          <label>Type</label>
+          <select name="t">
+            {{#each templateTypes}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+          </select>
+          <label class="tmac-inline-label">Hidden</label>
+          <input type="checkbox" name="hidden" {{#if state.hidden}}checked{{/if}}>
+        </div>
+
+        <div class="form-group tmac-row">
+          <label>Position</label>
+          <input type="number" name="x" value="{{state.x}}" step="1" class="tmac-num">
+          <span class="tmac-unit">X</span>
+          <input type="number" name="y" value="{{state.y}}" step="1" class="tmac-num">
+          <span class="tmac-unit">Y</span>
+        </div>
+
+        <div class="form-group tmac-row">
+          <label>Elevation</label>
+          <input type="number" name="elevation" value="{{state.elevation}}" step="1" class="tmac-num">
+          <label class="tmac-inline-label">Sort</label>
+          <input type="number" name="sort" value="{{state.sort}}" step="1" class="tmac-num">
+        </div>
+
+        <div class="form-group tmac-row">
+          <label>Direction</label>
+          <input type="number" name="direction" value="{{state.direction}}" step="any" class="tmac-num tmac-num-wide">
+          <span class="tmac-unit">deg</span>
+          <label class="tmac-inline-label">Angle</label>
+          <input type="number" name="angle" value="{{state.angle}}" step="1" class="tmac-num">
+          <span class="tmac-unit">deg</span>
+        </div>
+
+        <div class="form-group tmac-row">
+          <label>Distance</label>
+          <input type="number" name="distance" value="{{state.distance}}" step="any" class="tmac-num tmac-num-wide">
+          <span class="tmac-unit">gu</span>
+          <label class="tmac-inline-label">Width</label>
+          <input type="number" name="width" value="{{state.width}}" step="any" class="tmac-num">
+          <span class="tmac-unit">gu</span>
+        </div>
+
+        {{#unless state.useCustomRender}}
+          <div class="form-group tmac-row">
+            <label>Border</label>
+            <color-picker name="borderColorNative" value="{{state.borderColorNative}}"></color-picker>
+          </div>
+          <div class="form-group tmac-row">
+            <label>Fill</label>
+            <color-picker name="fillColorNative" value="{{state.fillColorNative}}"></color-picker>
+            <label class="tmac-inline-label">Opacity</label>
+            <input type="number" name="fillOpacity" value="{{state.fillOpacity}}" min="0" max="1" step="0.05" class="tmac-num">
+          </div>
+          <div class="form-group">
+            <label>Fill Texture</label>
+            <div class="form-fields">
+              <input type="text" name="textureNative" value="{{state.textureNative}}" placeholder="path/to/file.ext">
+              <button type="button" class="tmac-file-pick" data-target="textureNative" title="Browse">
+                <i class="fa-solid fa-file-import"></i>
+              </button>
+            </div>
+          </div>
+        {{/unless}}
+
+        <div class="form-group">
+          <label>Attached To</label>
+          <select name="attachedTokenId">
+            {{#each tokenOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+          </select>
+          <p class="hint">Token this template follows.</p>
+        </div>
+      </section>
+      {{/if}}
+
+      <section data-tmac-pane="geometry">
+        <div class="form-group">
+          <label>Radius Offset</label>
+          <div class="form-fields">
+            <input type="number" name="radiusOffset" value="{{state.radiusOffset}}" step="1">
+            <span class="tmac-unit">px</span>
+          </div>
+          <p class="hint">Expand or contract the visual outline. Positive grows, negative shrinks.</p>
+        </div>
+      </section>
+
+      <section data-tmac-pane="border">
+        <div class="form-group">
+          <label>Line Type</label>
+          <select name="lineType">
+            {{#each lineTypes}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+          </select>
+        </div>
+
+        {{#if hasLine}}
+          <div class="form-group">
+            <label>Line Width</label>
+            <div class="form-fields">
+              <input type="number" name="lineWidth" value="{{state.lineWidth}}" min="0.5" step="0.5">
+              <span class="tmac-unit">px</span>
+            </div>
+          </div>
+
+          {{#unless lineAnimationOn}}
+            <div class="form-group">
+              <label>Line Color</label>
+              <div class="form-fields">
+                <color-picker name="lineColor" value="{{state.lineColor}}"></color-picker>
+                <button type="button" class="tmac-anim-toggle" data-tmac-toggle-anim="line" title="Enable color animation">
+                  <i class="fa-solid fa-wand-magic-sparkles"></i>
+                </button>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Line Opacity</label>
+              <range-picker name="lineOpacity" value="{{state.lineOpacity}}" min="0" max="1" step="0.05"></range-picker>
+            </div>
+          {{/unless}}
+
+          {{#if lineAnimationOn}}
+            <fieldset class="tmac-anim-editor">
+              <legend>
+                Line Color Animation
+                <button type="button" class="tmac-anim-toggle on" data-tmac-toggle-anim="line" title="Disable animation">
+                  <i class="fa-solid fa-xmark"></i>
+                </button>
+              </legend>
+              <div class="tmac-anim-preview" data-tmac-anim="line"></div>
+            </fieldset>
+          {{/if}}
+
+          {{#if isDashed}}
+            <div class="form-group">
+              <label>Dash Size</label>
+              <div class="form-fields">
+                <input type="number" name="lineDashSize" value="{{state.lineDashSize}}" min="1" step="1">
+                <span class="tmac-unit">px</span>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Gap Size</label>
+              <div class="form-fields">
+                <input type="number" name="lineGapSize" value="{{state.lineGapSize}}" min="1" step="1">
+                <span class="tmac-unit">px</span>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Dash Scroll Speed</label>
+              <div class="form-fields">
+                <input type="number" name="lineDashOffsetAnimation" value="{{state.lineDashOffsetAnimation}}" step="1">
+                <span class="tmac-unit">px/s</span>
+              </div>
+              <p class="hint">Positive scrolls forward, negative reverses.</p>
+            </div>
+          {{/if}}
+        {{/if}}
+      </section>
+
+      <section data-tmac-pane="fill">
+        <div class="form-group">
+          <label>Fill Type</label>
+          <select name="fillType">
+            {{#each fillTypes}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+          </select>
+        </div>
+
+        {{#unless fillAnimationOn}}
+          <div class="form-group">
+            <label>Fill Color</label>
+            <div class="form-fields">
+              <color-picker name="fillColor" value="{{state.fillColor}}"></color-picker>
+              <button type="button" class="tmac-anim-toggle" data-tmac-toggle-anim="fill" title="Enable color animation">
+                <i class="fa-solid fa-wand-magic-sparkles"></i>
+              </button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Fill Opacity</label>
+            <range-picker name="fillOpacity" value="{{state.fillOpacity}}" min="0" max="1" step="0.05"></range-picker>
+          </div>
+        {{/unless}}
+
+        {{#if fillAnimationOn}}
+          <fieldset class="tmac-anim-editor">
+            <legend>
+              Fill Color Animation
+              <button type="button" class="tmac-anim-toggle on" data-tmac-toggle-anim="fill" title="Disable animation">
+                <i class="fa-solid fa-xmark"></i>
+              </button>
+            </legend>
+            <div class="tmac-anim-preview" data-tmac-anim="fill"></div>
+          </fieldset>
+        {{/if}}
+
+        {{#if hasTexture}}
+          <div class="form-group">
+            <label>Pattern Texture</label>
+            <div class="form-fields">
+              <input type="text" name="fillTexture" value="{{state.fillTexture}}" placeholder="path/to/texture.png">
+              <button type="button" class="tmac-file-pick" data-target="fillTexture" title="Browse">
+                <i class="fa-solid fa-file-import"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Texture Scale</label>
+            <div class="form-fields tmac-xy">
+              <input type="number" name="fillTextureScaleX" value="{{state.fillTextureScale.x}}" min="1" step="1">
+              <span class="tmac-unit">% X</span>
+              <input type="number" name="fillTextureScaleY" value="{{state.fillTextureScale.y}}" min="1" step="1">
+              <span class="tmac-unit">% Y</span>
+            </div>
+          </div>
+
+          {{#unless textureOffsetAnimationOn}}
+            <div class="form-group">
+              <label>Texture Offset</label>
+              <div class="form-fields tmac-xy">
+                <input type="number" name="fillTextureOffsetX" value="{{state.fillTextureOffset.x}}" step="1">
+                <span class="tmac-unit">px X</span>
+                <input type="number" name="fillTextureOffsetY" value="{{state.fillTextureOffset.y}}" step="1">
+                <span class="tmac-unit">px Y</span>
+                <button type="button" class="tmac-anim-toggle" data-tmac-toggle-anim="offset" title="Animate offset">
+                  <i class="fa-solid fa-wand-magic-sparkles"></i>
+                </button>
+              </div>
+            </div>
+          {{/unless}}
+
+          {{#if textureOffsetAnimationOn}}
+            <fieldset class="tmac-anim-editor">
+              <legend>
+                Texture Offset Animation
+                <button type="button" class="tmac-anim-toggle on" data-tmac-toggle-anim="offset" title="Disable">
+                  <i class="fa-solid fa-xmark"></i>
+                </button>
+              </legend>
+              <div class="form-group">
+                <label>Speed</label>
+                <div class="form-fields tmac-xy">
+                  <input type="number" name="fillTextureOffsetAnimationX" value="{{state.fillTextureOffsetAnimation.x}}" step="1">
+                  <span class="tmac-unit">px/s X</span>
+                  <input type="number" name="fillTextureOffsetAnimationY" value="{{state.fillTextureOffsetAnimation.y}}" step="1">
+                  <span class="tmac-unit">px/s Y</span>
+                </div>
+              </div>
+            </fieldset>
+          {{/if}}
+        {{/if}}
+      </section>
+
+      <section data-tmac-pane="label">
+        <div class="form-group">
+          <label>Center Label</label>
+          <textarea name="centerLabel" rows="2" placeholder="Text shown in the template center (Enter for line break)">{{state.centerLabel}}</textarea>
+          <p class="hint">Leave empty for no label.</p>
+        </div>
+      </section>
+
+      <section data-tmac-pane="misc">
+        {{#if isCircle}}
+        <fieldset>
+          <legend><i class="fa-solid fa-circle-dot"></i> Inner Circle</legend>
+          <div class="form-group">
+            <label>Radius</label>
+            <div class="form-fields">
+              <input type="number" name="innerRadius" value="{{state.innerRadius}}" step="any" min="0" class="tmac-num-wide">
+              <span class="tmac-unit">gu (0 = no hole)</span>
+            </div>
+          </div>
+        </fieldset>
+        {{/if}}
+        <fieldset>
+          <legend><i class="fa-solid fa-layer-group"></i> Elevation Aware</legend>
+          <div class="form-group">
+            <label>Enable</label>
+            <input type="checkbox" name="elevationGated" {{#if state.elevationGated}}checked{{/if}}>
+            <p class="hint">Tokens outside the band aren't counted. THT cells blocked by solid terrain are culled.</p>
+          </div>
+          <div class="form-group">
+            <label>Manual Range</label>
+            <input type="checkbox" name="elevationRangeManual" {{#if state.elevationRangeManual}}checked{{/if}}>
+            <p class="hint">Off: use template distance. On: use the value below.</p>
+          </div>
+          <div class="form-group">
+            <label>Range</label>
+            <div class="form-fields">
+              <input type="number" name="elevationRange" value="{{state.elevationRange}}" step="any" min="0" class="tmac-num-wide">
+              <span class="tmac-unit">gu (floor-rounded)</span>
+            </div>
+          </div>
+        </fieldset>
+        {{#if hasMovementRuler}}
+        <fieldset>
+          <legend><i class="fa-solid fa-shoe-prints"></i> Movement Penalty</legend>
+          <div class="form-group">
+            <label>Penalty</label>
+            <div class="form-fields">
+              <input type="number" name="movementPenalty" value="{{state.movementPenalty}}" step="any" class="tmac-num-wide">
+              <span class="tmac-unit">gu/hex or multiplier</span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Flat</label>
+            <input type="checkbox" name="flatMovementPenalty" {{#if state.flatMovementPenalty}}checked{{/if}}>
+            <p class="hint">On: flat gu per hex. Off: multiplier on cost.</p>
+          </div>
+        </fieldset>
+        {{/if}}
+      </section>
+
+      {{#if showMacros}}
+      <section data-tmac-pane="macros">
+        <ul class="tmac-action-list">
+          {{#each actionRows}}
+          <li class="tmac-action-item {{#if editing}}editing{{/if}}">
+            <header class="tmac-action-row">
+              <span class="tmac-action-trigger">{{trigger}}</span>
+              <i class="fa-solid {{icon}}"></i>
+              <span class="tmac-action-summary" title="{{summary}}">{{summary}}</span>
+              <button type="button" data-tmac-action-edit="{{id}}" title="{{#if editing}}Collapse{{else}}Edit{{/if}}">
+                <i class="fa-solid {{#if editing}}fa-chevron-up{{else}}fa-pen{{/if}}"></i>
+              </button>
+              <button type="button" data-tmac-action-duplicate="{{id}}" title="Duplicate"><i class="fa-solid fa-clone"></i></button>
+              <button type="button" data-tmac-action-remove="{{id}}" title="Delete"><i class="fa-solid fa-trash"></i></button>
+            </header>
+            {{#if editing}}
+            <div class="tmac-action-edit">
+              <div class="form-group">
+                <label>Trigger</label>
+                <select name="action_{{index}}_trigger">
+                  {{#each triggerOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Action Type</label>
+                <select name="action_{{index}}_actionType" data-tmac-action-actiontype="{{id}}">
+                  {{#each actionTypeOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Team Filter</label>
+                <select name="action_{{index}}_targetFilter">
+                  {{#each targetFilterFlat}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+                  {{#each targetFilterGroups}}
+                    <optgroup label="{{label}}">
+                      {{#each options}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+                    </optgroup>
+                  {{/each}}
+                </select>
+                <p class="hint">Only tokens matching this filter trigger the action.</p>
+              </div>
+
+              {{#if isCode}}
+                <div class="form-group">
+                  <label>Run as GM</label>
+                  <input type="checkbox" name="action_{{index}}_asGM" {{#if asGM}}checked{{/if}}>
+                </div>
+                <textarea name="action_{{index}}_code" rows="6" placeholder="// JavaScript code... (scope: template, scene, user, options)">{{code}}</textarea>
+              {{/if}}
+
+              {{#if isMacro}}
+                <div class="form-group">
+                  <label>Macro</label>
+                  <div class="form-fields">
+                    <input type="text" name="action_{{index}}_macroUuid" value="{{macroUuid}}" class="tmac-macro-input" data-tmac-action-macro="{{id}}" placeholder="Macro UUID, or drag & drop a Macro here">
+                  </div>
+                  <p class="hint">Drag a macro from the Macros directory onto the field.</p>
+                </div>
+              {{/if}}
+
+              {{#if isEffect}}
+                <div class="form-group">
+                  <label>Effect Mode</label>
+                  <select name="action_{{index}}_effectMode">
+                    {{#each effectModeOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Effect Name or Status ID</label>
+                  <input type="text" name="action_{{index}}_effectName" value="{{effectName}}" placeholder="e.g. burning, slowed">
+                  <p class="hint">Status condition ID or active-effect name to apply or remove on the contained token.</p>
+                </div>
+              {{/if}}
+            </div>
+            {{/if}}
+          </li>
+          {{/each}}
+        </ul>
+        {{#unless actionRows.length}}
+          <p class="hint" style="text-align: center; padding: 12px;">No actions configured.</p>
+        {{/unless}}
+        <button type="button" class="tmac-action-add" data-tmac-action-add>
+          <i class="fa-solid fa-plus"></i> Add Action
+        </button>
+      </section>
+      {{/if}}
+
+    </div>
+  </div>
+
+  <footer class="tmac-footer">
+    {{#if isTemplateMode}}
+    <button type="button" class="tmac-sheet-save-preset" title="Save this template's style+macros as a library preset"><i class="fa-solid fa-bookmark"></i> Save as Preset</button>
+    <button type="button" class="tmac-sheet-save-spawn" title="Save this template as a spawnable library template"><i class="fa-solid fa-shapes"></i> Save as Template</button>
+    <button type="button" class="tmac-sheet-export" title="Export this template as JSON"><i class="fa-solid fa-file-export"></i> Export</button>
+    <button type="button" class="tmac-sheet-import" title="Import a template JSON"><i class="fa-solid fa-file-import"></i> Import</button>
+    {{/if}}
+    <button type="submit"><i class="fa-solid fa-save"></i> Save</button>
+  </footer>
+</div>
+

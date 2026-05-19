@@ -10,7 +10,9 @@ import {
   attachTemplateToToken,
   detachTemplateFromToken
 } from "./scripts/api.mjs";
-import { MODULE } from "./scripts/constants.mjs";
+import { MODULE, LINE_TYPES } from "./scripts/constants.mjs";
+import { TemplatemacroGraphicsConfig } from "./scripts/applications/graphics-config.mjs";
+import { TemplateLibraryConfig, seedLibraryIfEmpty, registerLibraryHooks } from "./scripts/applications/template-library.mjs";
 import {
   _createHeaderButton,
   _createTemplate,
@@ -25,6 +27,7 @@ import {
 } from "./scripts/hooks.mjs";
 import { callMacro, registerCallback, unregisterCallbacks } from "./scripts/templatemacro.mjs";
 import { registerPatternFillHooks, FILL_TYPES } from "./scripts/patternFill.mjs";
+import { registerDragElevation } from "./scripts/drag-elevation.mjs";
 
 class ZoneConfig extends FormApplication {
   static get defaultOptions() {
@@ -94,6 +97,18 @@ class ZoneConfig extends FormApplication {
   }
 }
 
+Hooks.once("init", () => {
+  const tmplCls = CONFIG.MeasuredTemplate?.documentClass ?? MeasuredTemplateDocument;
+  DocumentSheetConfig.unregisterSheet(tmplCls, "core", MeasuredTemplateConfig);
+  DocumentSheetConfig.registerSheet(tmplCls, MODULE, TemplatemacroGraphicsConfig, {
+    label: "Template Macro Sheet",
+    makeDefault: true
+  });
+
+  registerLibraryHooks();
+  registerDragElevation();
+});
+
 Hooks.once("setup", () => {
   game.modules.get(MODULE).api = {
     findContainers,
@@ -123,7 +138,6 @@ Hooks.once("setup", () => {
 
   Hooks.on("createMeasuredTemplate", _createTemplate);
   Hooks.on("deleteMeasuredTemplate", _deleteTemplate);
-  Hooks.on("getMeasuredTemplateConfigHeaderButtons", _createHeaderButton);
   Hooks.on("preUpdateMeasuredTemplate", _preUpdateTemplate);
   Hooks.on("preUpdateToken", _preUpdateToken);
   Hooks.on("updateMeasuredTemplate", _updateTemplate);
@@ -133,34 +147,31 @@ Hooks.once("setup", () => {
 
   if (game.system.id === "lancer") {
     _registerLancerSettings();
-    Hooks.on("getSceneControlButtons", (controls) => {
-      const templateControls = controls.find(c => c.name === "measure");
-      if (!templateControls) return;
-      templateControls.tools.push(
-        {
-          name: "dangerousZone",
-          title: "Place Dangerous Zone",
-          icon: "fas fa-radiation",
-          button: true,
-          onClick: () => _showDangerousZoneDialog()
-        },
-        {
-          name: "statusZone",
-          title: "Place Status Effect Zone",
-          icon: "fas fa-bolt",
-          button: true,
-          onClick: () => _showStatusZoneDialog()
-        },
-        {
-          name: "difficultTerrainZone",
-          title: "Place Difficult Terrain Zone",
-          icon: "fas fa-mountain",
-          button: true,
-          onClick: () => _showDifficultTerrainZoneDialog()
-        }
-      );
-    });
   }
+  Hooks.on("getSceneControlButtons", (controls) => {
+    const templateControls = controls.find(c => c.name === "measure");
+    if (!templateControls) return;
+    templateControls.tools.push({
+      name: "templateLibrary",
+      title: "Template Library",
+      icon: "fas fa-folder-open",
+      toggle: true,
+      active: !!_findOpenLibrary(),
+      onClick: () => _toggleTemplateLibrary()
+    });
+  });
+  let _lastActiveControl = null;
+  Hooks.on("renderSceneControls", (controls) => {
+    const current = controls?.activeControl ?? null;
+    const enteredMeasure = current === "measure" && _lastActiveControl !== "measure";
+    _lastActiveControl = current;
+    if (current !== "measure") {
+      _closeTemplateLibrary();
+    } else if (enteredMeasure && game.settings.get(MODULE, "autoOpenLibrary") && !_findOpenLibrary()) {
+      new TemplateLibraryConfig().render(true);
+    }
+  });
+  Hooks.once("ready", () => seedLibraryIfEmpty());
 
   registerPatternFillHooks();
 });
@@ -309,9 +320,6 @@ function _registerLancerSettings() {
     default: false
   });
 
-  // --- New Settings for Popup Configuration ---
-
-  // Dangerous Zone - Additional Defaults
   game.settings.register(MODULE, "dangerZoneDefaultBorderOpacity", {
     scope: "world",
     config: false,
@@ -416,14 +424,190 @@ function _registerLancerSettings() {
     default: 12
   });
 
-  game.settings.registerMenu(MODULE, "zoneConfig", {
-    name: "Zone Configuration",
-    label: "Configure Zones",
-    hint: "Configure default settings for Dangerous, Status, and Difficult Terrain Zones",
-    icon: "fas fa-cogs",
-    type: ZoneConfig,
+  game.settings.register(MODULE, "thtAutoElevation", {
+    name: "THT Auto Elevation",
+    hint: "When moving a template, auto-adjust its elevation by the difference in THT terrain elevation between the old and new position. Preserves any offset above ground.",
+    scope: "world",
+    config: true,
+    type: Boolean,
+    default: false
+  });
+
+  game.settings.register(MODULE, "defaultCenterLabel", {
+    name: "Default Center Label",
+    hint: "Shown on templates that have no per-template label. Leave empty to disable.",
+    scope: "world",
+    config: true,
+    type: String,
+    default: "⚠"
+  });
+
+  game.settings.register(MODULE, "autoOpenLibrary", {
+    name: "Auto-Open Template Library",
+    hint: "Automatically open the Template Library when entering the measurement scene controls.",
+    scope: "client",
+    config: true,
+    type: Boolean,
+    default: false
+  });
+
+  _registerGraphicDefaults("danger");
+  _registerGraphicDefaults("status");
+  _registerGraphicDefaults("difficult");
+
+  game.settings.register(MODULE, "templateLibrary", {
+    scope: "world",
+    config: false,
+    type: Array,
+    default: []
+  });
+
+  game.settings.register(MODULE, "templateLibrarySpawn", {
+    scope: "world",
+    config: false,
+    type: Array,
+    default: []
+  });
+
+  game.settings.registerMenu(MODULE, "templateLibrary", {
+    name: "Template Library",
+    label: "Open Library",
+    hint: "Pre-configured templates you can spawn from the scene controls.",
+    icon: "fas fa-folder-open",
+    type: _makeLibraryLauncher(),
     restricted: true
   });
+
+  game.settings.registerMenu(MODULE, "restoreDefaults", {
+    name: "Restore Module Defaults",
+    label: "Restore",
+    hint: "Reset all templateMacro settings to their defaults and re-seed the default template library entries (Dangerous Zone, Status Zone).",
+    icon: "fas fa-arrow-rotate-left",
+    type: _makeRestoreDefaultsLauncher(),
+    restricted: true
+  });
+}
+
+function _registerGraphicDefaults(zoneType) {
+  const prefix = zoneType === "difficult" ? "difficultTerrainDefault" : `${zoneType}ZoneDefault`;
+  const reg = (field, type, defaultVal) => {
+    const key = `${prefix}${field}`;
+    if (game.settings.settings.has(`${MODULE}.${key}`)) return;
+    game.settings.register(MODULE, key, { scope: "world", config: false, type, default: defaultVal });
+  };
+  reg("UseCustomRender", Boolean, true);
+  reg("RadiusOffset", Number, 0);
+  reg("LineType", Number, LINE_TYPES.SOLID);
+  reg("LineWidth", Number, 2);
+  reg("LineColor", String, "#000000");
+  reg("LineOpacity", Number, 0.5);
+  reg("LineDashSize", Number, 15);
+  reg("LineGapSize", Number, 10);
+  reg("LineDashOffsetAnimation", Number, 0);
+  reg("LineColorAnimation", Object, null);
+  reg("FillColorAnimation", Object, null);
+  reg("FillTexture", String, "");
+  reg("FillTextureOffset", Object, { x: 0, y: 0 });
+  reg("FillTextureOffsetAnimation", Object, null);
+  reg("FillTextureScale", Object, { x: 100, y: 100 });
+  reg("CenterLabel", String, "");
+  reg("Actions", Object, []);
+}
+
+function _buildPlacementGraphicsState(zoneType) {
+  const prefix = zoneType === "difficult" ? "difficultTerrainDefault" : `${zoneType}ZoneDefault`;
+  const read = (field, fallback) => {
+    try { return game.settings.get(MODULE, `${prefix}${field}`) ?? fallback; }
+    catch { return fallback; }
+  };
+  return {
+    useCustomRender: read("UseCustomRender", true),
+    radiusOffset: read("RadiusOffset", 0),
+    lineType: read("LineType", LINE_TYPES.SOLID),
+    lineWidth: read("LineWidth", 2),
+    lineColor: read("LineColor", read("BorderColor", "#000000")),
+    lineOpacity: read("LineOpacity", read("BorderOpacity", 0.5)),
+    lineDashSize: read("LineDashSize", 15),
+    lineGapSize: read("LineGapSize", 10),
+    lineDashOffsetAnimation: read("LineDashOffsetAnimation", 0),
+    lineColorAnimation: read("LineColorAnimation", null),
+    fillType: read("FillType", 1),
+    fillColor: read("FillColor", "#ff6400"),
+    fillOpacity: read("FillOpacity", 0.5),
+    fillColorAnimation: read("FillColorAnimation", null),
+    fillTexture: read("FillTexture", "") || read("Texture", ""),
+    fillTextureOffset: read("FillTextureOffset", { x: 0, y: 0 }),
+    fillTextureOffsetAnimation: read("FillTextureOffsetAnimation", null),
+    fillTextureScale: read("FillTextureScale", { x: 100, y: 100 }),
+    centerLabel: read("CenterLabel", ""),
+    actions: read("Actions", [])
+  };
+}
+
+function _findOpenLibrary() {
+  for (const app of foundry.applications.instances?.values?.() ?? []) {
+    if (app instanceof TemplateLibraryConfig) return app;
+  }
+  return Object.values(ui.windows).find(w => w instanceof TemplateLibraryConfig);
+}
+
+function _toggleTemplateLibrary() {
+  const existing = _findOpenLibrary();
+  if (existing) existing.close();
+  else new TemplateLibraryConfig().render(true);
+}
+
+function _closeTemplateLibrary() {
+  const existing = _findOpenLibrary();
+  if (existing) existing.close();
+}
+
+function _makeLibraryLauncher() {
+  return class TmacLibraryLauncher extends FormApplication {
+    static get defaultOptions() { return super.defaultOptions; }
+    render() {
+      new TemplateLibraryConfig().render(true);
+      return this;
+    }
+    async _updateObject() {}
+  };
+}
+
+function _makeRestoreDefaultsLauncher() {
+  return class TmacRestoreDefaultsLauncher extends FormApplication {
+    static get defaultOptions() { return super.defaultOptions; }
+    render() {
+      Dialog.confirm({
+        title: "Restore templateMacro Defaults",
+        content: `<p>Reset all templateMacro world settings to their built-in defaults and re-seed the default template library entries?</p><p><strong>Custom library entries you added will be removed.</strong></p>`,
+        yes: async () => {
+          for (const [key, setting] of game.settings.settings) {
+            if (!key.startsWith(`${MODULE}.`)) continue;
+            if (setting.scope !== "world") continue;
+            if (key === `${MODULE}.templateLibrary`) continue;
+            try { await game.settings.set(MODULE, key.slice(MODULE.length + 1), setting.default); }
+            catch { /* skip read-only or unregistered */ }
+          }
+          await game.settings.set(MODULE, "templateLibrary", []);
+          await seedLibraryIfEmpty();
+          ui.notifications?.info("templateMacro defaults restored.");
+        }
+      });
+      return this;
+    }
+    async _updateObject() {}
+  };
+}
+
+function _makeDefaultsLauncher(zoneType) {
+  return class TmacDefaultsLauncher extends FormApplication {
+    static get defaultOptions() { return super.defaultOptions; }
+    render() {
+      new TemplatemacroGraphicsConfig({ mode: "defaults", zoneType }).render(true);
+      return this;
+    }
+    async _updateObject() {}
+  };
 }
 
 function initDialogListeners(html) {
@@ -451,19 +635,7 @@ function initDialogListeners(html) {
 }
 
 async function _showDangerousZoneDialog() {
-  // Read defaults from settings
-  const defaultFillType = game.settings.get(MODULE, "dangerZoneDefaultFillType");
-  const defaultTexture = game.settings.get(MODULE, "dangerZoneDefaultTexture");
-  const defaultFillColor = game.settings.get(MODULE, "dangerZoneDefaultFillColor");
-  const defaultBorderColor = game.settings.get(MODULE, "dangerZoneDefaultBorderColor");
-  const defaultFillOpacity = game.settings.get(MODULE, "dangerZoneDefaultFillOpacity");
-  const defaultAnimation = game.settings.get(MODULE, "dangerZoneDefaultAnimation");
-  const defaultFillPulse = game.settings.get(MODULE, "dangerZoneDefaultFillPulse");
-  const defaultBorderOpacity = game.settings.get(MODULE, "dangerZoneDefaultBorderOpacity");
-  const defaultAnimationSpeed = game.settings.get(MODULE, "dangerZoneDefaultFillAnimationSpeed");
-  const defaultAnimationAngle = game.settings.get(MODULE, "dangerZoneDefaultFillAnimationAngle");
-  const defaultFillPulseSpeed = game.settings.get(MODULE, "dangerZoneDefaultFillPulseSpeed");
-  const isPattern = defaultFillType === FILL_TYPES.PATTERN;
+  const graphicsState = _buildPlacementGraphicsState("danger");
 
   const content = `
     <form>
@@ -496,82 +668,11 @@ async function _showDangerousZoneDialog() {
         <input type="number" name="damageValue" value="5"/>
       </div>
       <div class="form-group">
-        <label>Center Label</label>
-        <input type="text" name="centerLabel" value="" placeholder="Text shown in template center…"/>
-      </div>
-      <div class="form-group">
-        <label>Fill Type</label>
-        <select name="fillType" id="dangerouszone-fillType">
-          <option value="1" ${defaultFillType === FILL_TYPES.SOLID ? 'selected' : ''}>Solid</option>
-          <option value="2" ${defaultFillType === FILL_TYPES.PATTERN ? 'selected' : ''}>Pattern (Stripes)</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Fill Color</label>
-        <input type="color" name="fillColor" value="${defaultFillColor}"/>
-      </div>
-      <div class="form-group">
-        <label>Border Color</label>
-        <input type="color" name="borderColor" value="${defaultBorderColor}"/>
-      </div>
-      <div class="form-group pattern-options" style="${isPattern ? '' : 'display:none;'}">
-        <label>Pattern Texture</label>
-        <div class="form-fields">
-          <input type="text" name="fillTexture" value="${defaultTexture}"/>
-          <button type="button" class="file-picker" data-type="imagevideo" data-target="fillTexture" title="Browse Files">
-            <i class="fas fa-file-import"></i>
-          </button>
-        </div>
-      </div>
-      <div class="form-group pattern-options" style="${isPattern ? '' : 'display:none;'}">
-        <label>Pattern Size</label>
-        <div class="form-fields">
-          <input type="range" name="fillSize" value="0.5" min="0.1" max="3" step="0.1">
-          <span class="range-value">0.5</span>
-        </div>
-      </div>
-      <div class="form-group pattern-options" style="${isPattern ? '' : 'display:none;'}">
-        <label>Fill Opacity</label>
-        <div class="form-fields">
-          <input type="range" name="fillOpacity" value="${defaultFillOpacity}" min="0" max="1" step="0.05">
-          <span class="range-value">${defaultFillOpacity}</span>
-        </div>
-      </div>
-      <div class="form-group pattern-options" style="${isPattern ? '' : 'display:none;'}">
-        <label>Border Opacity</label>
-        <div class="form-fields">
-          <input type="range" name="borderOpacity" value="${defaultBorderOpacity}" min="0" max="1" step="0.05">
-          <span class="range-value">${defaultBorderOpacity}</span>
-        </div>
-      </div>
-      <div class="form-group pattern-options" style="${isPattern ? '' : 'display:none;'}">
-        <label>Fill Animation</label>
-        <input type="checkbox" name="fillAnimation" ${defaultAnimation ? 'checked' : ''}>
-      </div>
-      <div class="form-group pattern-options animation-options" style="${isPattern ? '' : 'display:none;'}">
-        <label>Animation Speed</label>
-        <div class="form-fields">
-          <input type="range" name="fillAnimationSpeed" value="${defaultAnimationSpeed}" min="0.1" max="3" step="0.1">
-          <span class="range-value">${defaultAnimationSpeed}</span>
-        </div>
-      </div>
-      <div class="form-group pattern-options animation-options" style="${isPattern ? '' : 'display:none;'}">
-        <label>Animation Angle</label>
-        <div class="form-fields">
-          <input type="range" name="fillAnimationAngle" value="${defaultAnimationAngle}" min="0" max="360" step="15">
-          <span class="range-value">${defaultAnimationAngle}°</span>
-        </div>
-      </div>
-      <div class="form-group pattern-options" style="${isPattern ? '' : 'display:none;'}">
-        <label>Fill Pulse</label>
-        <input type="checkbox" name="fillPulse" ${defaultFillPulse ? 'checked' : ''}>
-      </div>
-      <div class="form-group pattern-options pulse-options" style="${isPattern ? '' : 'display:none;'}">
-        <label>Pulse Speed</label>
-        <div class="form-fields">
-          <input type="range" name="fillPulseSpeed" value="${defaultFillPulseSpeed}" min="0.1" max="3" step="0.1">
-          <span class="range-value">${defaultFillPulseSpeed}</span>
-        </div>
+        <label>Graphics &amp; Label</label>
+        <button type="button" class="tmac-configure-graphics">
+          <i class="fa-solid fa-palette"></i> Configure Graphics & Label…
+        </button>
+        <p class="hint">Border, fill, color animation, label.</p>
       </div>
     </form>
   `;
@@ -588,49 +689,25 @@ async function _showDangerousZoneDialog() {
           const type = html.find('[name="type"]').val();
           const damageType = html.find('[name="damageType"]').val();
           const damageValue = parseInt(html.find('[name="damageValue"]').val()) || 5;
-          const centerLabel = html.find('[name="centerLabel"]').val().trim();
-          const fillColor = html.find('[name="fillColor"]').val();
-          const borderColor = html.find('[name="borderColor"]').val();
-          const fillType = parseInt(html.find('[name="fillType"]').val());
-          const fillTexture = html.find('[name="fillTexture"]').val();
-          const fillSize = parseFloat(html.find('[name="fillSize"]').val()) || 0.5;
-          const fillOpacity = parseFloat(html.find('[name="fillOpacity"]').val()) || 0.5;
-          const borderOpacity = parseFloat(html.find('[name="borderOpacity"]').val()) || 0.5;
-          const fillAnimation = html.find('[name="fillAnimation"]').is(':checked');
-          const fillAnimationSpeed = parseFloat(html.find('[name="fillAnimationSpeed"]').val()) || 0.5;
-          const fillAnimationAngle = parseFloat(html.find('[name="fillAnimationAngle"]').val()) || 0;
-          const fillPulse = html.find('[name="fillPulse"]').is(':checked');
-          const fillPulseSpeed = parseFloat(html.find('[name="fillPulseSpeed"]').val()) || 1;
-
-          await placeDangerousZone({
-            size, type, fillColor, borderColor, fillType, fillTexture, fillSize, fillOpacity, borderOpacity,
-            fillAnimation, fillAnimationSpeed, fillAnimationAngle, fillPulse, fillPulseSpeed, centerLabel
-          }, damageType, damageValue);
+          await placeDangerousZone({ size, type, tmacGraphics: graphicsState }, damageType, damageValue);
         }
       },
       cancel: { icon: '<i class="fas fa-times"></i>', label: "Cancel" }
     },
     default: "place",
-    render: initDialogListeners
+    render: (html) => {
+      html.find(".tmac-configure-graphics").on("click", async () => {
+        const { openPlacementGraphicsConfig } = await import("./scripts/applications/graphics-config.mjs");
+        openPlacementGraphicsConfig("danger", graphicsState, (newState) => {
+          Object.assign(graphicsState, newState);
+        });
+      });
+    }
   }).render(true);
 }
 
 async function _showStatusZoneDialog() {
-  const defaults = {
-    fillType: game.settings.get(MODULE, "statusZoneDefaultFillType"),
-    texture: game.settings.get(MODULE, "statusZoneDefaultTexture"),
-    fillColor: game.settings.get(MODULE, "statusZoneDefaultFillColor"),
-    borderColor: game.settings.get(MODULE, "statusZoneDefaultBorderColor"),
-    fillOpacity: game.settings.get(MODULE, "statusZoneDefaultFillOpacity"),
-    animation: game.settings.get(MODULE, "statusZoneDefaultAnimation"),
-    fillPulse: game.settings.get(MODULE, "statusZoneDefaultFillPulse"),
-    borderOpacity: game.settings.get(MODULE, "statusZoneDefaultBorderOpacity"),
-    animationSpeed: game.settings.get(MODULE, "statusZoneDefaultFillAnimationSpeed"),
-    animationAngle: game.settings.get(MODULE, "statusZoneDefaultFillAnimationAngle"),
-    fillPulseSpeed: game.settings.get(MODULE, "statusZoneDefaultFillPulseSpeed")
-  };
-  
-  const isPattern = defaults.fillType === FILL_TYPES.PATTERN;
+  const graphicsState = _buildPlacementGraphicsState("status");
   const statusEffects = CONFIG.statusEffects || [];
   const statusOptions = statusEffects.map(s => {
     let label = s.name || s.label || s.id;
@@ -660,82 +737,11 @@ async function _showStatusZoneDialog() {
         </select>
       </div>
       <div class="form-group">
-        <label>Center Label</label>
-        <input type="text" name="centerLabel" value="" placeholder="Text shown in template center…"/>
-      </div>
-      <div class="form-group">
-        <label>Fill Type</label>
-        <select name="fillType" id="statuszone-fillType">
-          <option value="1" ${defaults.fillType === FILL_TYPES.SOLID ? 'selected' : ''}>Solid</option>
-          <option value="2" ${defaults.fillType === FILL_TYPES.PATTERN ? 'selected' : ''}>Pattern (Stripes)</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Fill Color</label>
-        <input type="color" name="fillColor" value="${defaults.fillColor}"/>
-      </div>
-      <div class="form-group">
-        <label>Border Color</label>
-        <input type="color" name="borderColor" value="${defaults.borderColor}"/>
-      </div>
-      <div class="form-group pattern-options" style="${isPattern ? '' : 'display:none;'}">
-        <label>Pattern Texture</label>
-        <div class="form-fields">
-          <input type="text" name="fillTexture" value="${defaults.texture}"/>
-          <button type="button" class="file-picker" data-type="imagevideo" data-target="fillTexture" title="Browse Files">
-            <i class="fas fa-file-import"></i>
-          </button>
-        </div>
-      </div>
-      <div class="form-group pattern-options" style="${isPattern ? '' : 'display:none;'}">
-        <label>Pattern Size</label>
-        <div class="form-fields">
-          <input type="range" name="fillSize" value="0.5" min="0.1" max="3" step="0.1">
-          <span class="range-value">0.5</span>
-        </div>
-      </div>
-      <div class="form-group pattern-options" style="${isPattern ? '' : 'display:none;'}">
-        <label>Fill Opacity</label>
-        <div class="form-fields">
-          <input type="range" name="fillOpacity" value="${defaults.fillOpacity}" min="0" max="1" step="0.05">
-          <span class="range-value">${defaults.fillOpacity}</span>
-        </div>
-      </div>
-      <div class="form-group pattern-options" style="${isPattern ? '' : 'display:none;'}">
-        <label>Border Opacity</label>
-        <div class="form-fields">
-          <input type="range" name="borderOpacity" value="${defaults.borderOpacity}" min="0" max="1" step="0.05">
-          <span class="range-value">${defaults.borderOpacity}</span>
-        </div>
-      </div>
-      <div class="form-group pattern-options" style="${isPattern ? '' : 'display:none;'}">
-        <label>Fill Animation</label>
-        <input type="checkbox" name="fillAnimation" ${defaults.animation ? 'checked' : ''}>
-      </div>
-      <div class="form-group pattern-options animation-options" style="${isPattern ? '' : 'display:none;'}">
-        <label>Animation Speed</label>
-        <div class="form-fields">
-          <input type="range" name="fillAnimationSpeed" value="${defaults.animationSpeed}" min="0.1" max="3" step="0.1">
-          <span class="range-value">${defaults.animationSpeed}</span>
-        </div>
-      </div>
-      <div class="form-group pattern-options animation-options" style="${isPattern ? '' : 'display:none;'}">
-        <label>Animation Angle</label>
-        <div class="form-fields">
-          <input type="range" name="fillAnimationAngle" value="${defaults.animationAngle}" min="0" max="360" step="15">
-          <span class="range-value">${defaults.animationAngle}°</span>
-        </div>
-      </div>
-      <div class="form-group pattern-options" style="${isPattern ? '' : 'display:none;'}">
-        <label>Fill Pulse</label>
-        <input type="checkbox" name="fillPulse" ${defaults.fillPulse ? 'checked' : ''}>
-      </div>
-      <div class="form-group pattern-options pulse-options" style="${isPattern ? '' : 'display:none;'}">
-        <label>Pulse Speed</label>
-        <div class="form-fields">
-          <input type="range" name="fillPulseSpeed" value="${defaults.fillPulseSpeed}" min="0.1" max="3" step="0.1">
-          <span class="range-value">${defaults.fillPulseSpeed}</span>
-        </div>
+        <label>Graphics &amp; Label</label>
+        <button type="button" class="tmac-configure-graphics">
+          <i class="fa-solid fa-palette"></i> Configure Graphics & Label…
+        </button>
+        <p class="hint">Border, fill, color animation, label.</p>
       </div>
     </form>
   `;
@@ -748,55 +754,31 @@ async function _showStatusZoneDialog() {
         icon: '<i class="fas fa-check"></i>',
         label: "Place",
         callback: async (html) => {
-          const centerLabel = html.find('[name="centerLabel"]').val().trim();
           const size = parseFloat(html.find('[name="size"]').val()) || 1;
           const type = html.find('[name="type"]').val();
           const selected = html.find('[name="statusEffects"]').val() || [];
-          const fillColor = html.find('[name="fillColor"]').val();
-          const borderColor = html.find('[name="borderColor"]').val();
-          const fillType = parseInt(html.find('[name="fillType"]').val());
-          const fillTexture = html.find('[name="fillTexture"]').val();
-          const fillSize = parseFloat(html.find('[name="fillSize"]').val()) || 0.5;
-          const fillOpacity = parseFloat(html.find('[name="fillOpacity"]').val()) || 0.5;
-          const borderOpacity = parseFloat(html.find('[name="borderOpacity"]').val()) || 0.5;
-          const fillAnimation = html.find('[name="fillAnimation"]').is(':checked');
-          const fillAnimationSpeed = parseFloat(html.find('[name="fillAnimationSpeed"]').val()) || 0.5;
-          const fillAnimationAngle = parseFloat(html.find('[name="fillAnimationAngle"]').val()) || 0;
-          const fillPulse = html.find('[name="fillPulse"]').is(':checked');
-          const fillPulseSpeed = parseFloat(html.find('[name="fillPulseSpeed"]').val()) || 1;
-          
           if (selected.length === 0) return ui.notifications.warn("Select at least one status effect.");
-
-          await placeZoneWithStatusEffect({
-            size, type, fillColor, borderColor, fillType, fillTexture, fillSize, fillOpacity, borderOpacity,
-            fillAnimation, fillAnimationSpeed, fillAnimationAngle, fillPulse, fillPulseSpeed, centerLabel
-          }, selected);
+          await placeZoneWithStatusEffect({ size, type, tmacGraphics: graphicsState }, selected);
         }
       },
       cancel: { icon: '<i class="fas fa-times"></i>', label: "Cancel" }
     },
     default: "place",
-    render: initDialogListeners
+    render: (html) => {
+      html.find(".tmac-configure-graphics").on("click", async () => {
+        const { openPlacementGraphicsConfig } = await import("./scripts/applications/graphics-config.mjs");
+        openPlacementGraphicsConfig("status", graphicsState, (newState) => {
+          Object.assign(graphicsState, newState);
+        });
+      });
+    }
   }).render(true);
 }
 
 async function _showDifficultTerrainZoneDialog() {
-  const defaults = {
-    movementPenalty: game.settings.get(MODULE, "difficultTerrainDefaultMovementPenalty"),
-    flatPenalty: game.settings.get(MODULE, "difficultTerrainDefaultFlatPenalty"),
-    fillType: game.settings.get(MODULE, "difficultTerrainDefaultFillType"),
-    texture: game.settings.get(MODULE, "difficultTerrainDefaultTexture"),
-    fillColor: game.settings.get(MODULE, "difficultTerrainDefaultFillColor"),
-    borderColor: game.settings.get(MODULE, "difficultTerrainDefaultBorderColor"),
-    fillOpacity: game.settings.get(MODULE, "difficultTerrainDefaultFillOpacity"),
-    animation: game.settings.get(MODULE, "difficultTerrainDefaultAnimation"),
-    fillPulse: game.settings.get(MODULE, "difficultTerrainDefaultFillPulse"),
-    borderOpacity: game.settings.get(MODULE, "difficultTerrainDefaultBorderOpacity"),
-    animationSpeed: game.settings.get(MODULE, "difficultTerrainDefaultFillAnimationSpeed"),
-    animationAngle: game.settings.get(MODULE, "difficultTerrainDefaultFillAnimationAngle"),
-    fillPulseSpeed: game.settings.get(MODULE, "difficultTerrainDefaultFillPulseSpeed")
-  };
-  const isPattern = defaults.fillType === FILL_TYPES.PATTERN;
+  const graphicsState = _buildPlacementGraphicsState("difficult");
+  const defaultMovementPenalty = game.settings.get(MODULE, "difficultTerrainDefaultMovementPenalty");
+  const defaultFlatPenalty = game.settings.get(MODULE, "difficultTerrainDefaultFlatPenalty");
 
   const content = `
     <form>
@@ -815,89 +797,18 @@ async function _showDifficultTerrainZoneDialog() {
       </div>
       <div class="form-group">
         <label>Movement Penalty (feet per hex)</label>
-        <input type="number" name="movementPenalty" value="${defaults.movementPenalty}" min="1" max="20" step="1"/>
+        <input type="number" name="movementPenalty" value="${defaultMovementPenalty}" min="1" max="20" step="1"/>
       </div>
       <div class="form-group">
         <label>Flat Penalty (adds cost; uncheck to multiply speed)</label>
-        <input type="checkbox" name="isFlatPenalty" ${defaults.flatPenalty ? "checked" : ""}/>
+        <input type="checkbox" name="isFlatPenalty" ${defaultFlatPenalty ? "checked" : ""}/>
       </div>
       <div class="form-group">
-        <label>Center Label</label>
-        <input type="text" name="centerLabel" value="" placeholder="Text shown in template center…"/>
-      </div>
-      <div class="form-group">
-        <label>Fill Type</label>
-        <select name="fillType">
-          <option value="1" ${defaults.fillType === FILL_TYPES.SOLID ? 'selected' : ''}>Solid</option>
-          <option value="2" ${defaults.fillType === FILL_TYPES.PATTERN ? 'selected' : ''}>Pattern (Stripes)</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Fill Color</label>
-        <input type="color" name="fillColor" value="${defaults.fillColor}"/>
-      </div>
-      <div class="form-group">
-        <label>Border Color</label>
-        <input type="color" name="borderColor" value="${defaults.borderColor}"/>
-      </div>
-      <div class="form-group pattern-options" style="${isPattern ? '' : 'display:none;'}">
-        <label>Pattern Texture</label>
-        <div class="form-fields">
-          <input type="text" name="fillTexture" value="${defaults.texture}"/>
-          <button type="button" class="file-picker" data-type="imagevideo" data-target="fillTexture" title="Browse Files">
-            <i class="fas fa-file-import"></i>
-          </button>
-        </div>
-      </div>
-      <div class="form-group pattern-options" style="${isPattern ? '' : 'display:none;'}">
-        <label>Pattern Size</label>
-        <div class="form-fields">
-          <input type="range" name="fillSize" value="0.5" min="0.1" max="3" step="0.1">
-          <span class="range-value">0.5</span>
-        </div>
-      </div>
-      <div class="form-group pattern-options" style="${isPattern ? '' : 'display:none;'}">
-        <label>Fill Opacity</label>
-        <div class="form-fields">
-          <input type="range" name="fillOpacity" value="${defaults.fillOpacity}" min="0" max="1" step="0.05">
-          <span class="range-value">${defaults.fillOpacity}</span>
-        </div>
-      </div>
-      <div class="form-group pattern-options" style="${isPattern ? '' : 'display:none;'}">
-        <label>Border Opacity</label>
-        <div class="form-fields">
-          <input type="range" name="borderOpacity" value="${defaults.borderOpacity}" min="0" max="1" step="0.05">
-          <span class="range-value">${defaults.borderOpacity}</span>
-        </div>
-      </div>
-      <div class="form-group pattern-options" style="${isPattern ? '' : 'display:none;'}">
-        <label>Fill Animation</label>
-        <input type="checkbox" name="fillAnimation" ${defaults.animation ? 'checked' : ''}>
-      </div>
-      <div class="form-group pattern-options animation-options" style="${isPattern ? '' : 'display:none;'}">
-        <label>Animation Speed</label>
-        <div class="form-fields">
-          <input type="range" name="fillAnimationSpeed" value="${defaults.animationSpeed}" min="0.1" max="3" step="0.1">
-          <span class="range-value">${defaults.animationSpeed}</span>
-        </div>
-      </div>
-      <div class="form-group pattern-options animation-options" style="${isPattern ? '' : 'display:none;'}">
-        <label>Animation Angle</label>
-        <div class="form-fields">
-          <input type="range" name="fillAnimationAngle" value="${defaults.animationAngle}" min="0" max="360" step="15">
-          <span class="range-value">${defaults.animationAngle}°</span>
-        </div>
-      </div>
-      <div class="form-group pattern-options" style="${isPattern ? '' : 'display:none;'}">
-        <label>Fill Pulse</label>
-        <input type="checkbox" name="fillPulse" ${defaults.fillPulse ? 'checked' : ''}>
-      </div>
-      <div class="form-group pattern-options pulse-options" style="${isPattern ? '' : 'display:none;'}">
-        <label>Pulse Speed</label>
-        <div class="form-fields">
-          <input type="range" name="fillPulseSpeed" value="${defaults.fillPulseSpeed}" min="0.1" max="3" step="0.1">
-          <span class="range-value">${defaults.fillPulseSpeed}</span>
-        </div>
+        <label>Graphics &amp; Label</label>
+        <button type="button" class="tmac-configure-graphics">
+          <i class="fa-solid fa-palette"></i> Configure Graphics & Label…
+        </button>
+        <p class="hint">Border, fill, color animation, label.</p>
       </div>
     </form>
   `;
@@ -912,31 +823,21 @@ async function _showDifficultTerrainZoneDialog() {
         callback: async (html) => {
           const size = parseFloat(html.find('[name="size"]').val()) || 1;
           const type = html.find('[name="type"]').val();
-          const movementPenalty = parseInt(html.find('[name="movementPenalty"]').val()) || defaults.movementPenalty;
+          const movementPenalty = parseInt(html.find('[name="movementPenalty"]').val()) || defaultMovementPenalty;
           const isFlatPenalty = html.find('[name="isFlatPenalty"]').is(':checked');
-          const centerLabel = html.find('[name="centerLabel"]').val().trim();
-          const fillColor = html.find('[name="fillColor"]').val();
-          const borderColor = html.find('[name="borderColor"]').val();
-          const fillType = parseInt(html.find('[name="fillType"]').val());
-          const fillTexture = html.find('[name="fillTexture"]').val();
-          const fillSize = parseFloat(html.find('[name="fillSize"]').val()) || 0.5;
-          const fillOpacity = parseFloat(html.find('[name="fillOpacity"]').val()) || 0.5;
-          const borderOpacity = parseFloat(html.find('[name="borderOpacity"]').val()) || 0.5;
-          const fillAnimation = html.find('[name="fillAnimation"]').is(':checked');
-          const fillAnimationSpeed = parseFloat(html.find('[name="fillAnimationSpeed"]').val()) || 0.5;
-          const fillAnimationAngle = parseFloat(html.find('[name="fillAnimationAngle"]').val()) || 0;
-          const fillPulse = html.find('[name="fillPulse"]').is(':checked');
-          const fillPulseSpeed = parseFloat(html.find('[name="fillPulseSpeed"]').val()) || 1;
-
-          await placeDifficultTerrainZone({
-            size, type, fillColor, borderColor, fillType, fillTexture, fillSize, fillOpacity, borderOpacity,
-            fillAnimation, fillAnimationSpeed, fillAnimationAngle, fillPulse, fillPulseSpeed, centerLabel
-          }, movementPenalty, isFlatPenalty);
+          await placeDifficultTerrainZone({ size, type, tmacGraphics: graphicsState }, movementPenalty, isFlatPenalty);
         }
       },
       cancel: { icon: '<i class="fas fa-times"></i>', label: "Cancel" }
     },
     default: "place",
-    render: initDialogListeners
+    render: (html) => {
+      html.find(".tmac-configure-graphics").on("click", async () => {
+        const { openPlacementGraphicsConfig } = await import("./scripts/applications/graphics-config.mjs");
+        openPlacementGraphicsConfig("difficult", graphicsState, (newState) => {
+          Object.assign(graphicsState, newState);
+        });
+      });
+    }
   }).render(true);
 }

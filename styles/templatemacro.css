@@ -35,3 +35,497 @@
 .templatemacro.macro-sheet .form-group.command textarea {
   height: calc(100% - 40px);
 }
+
+/* Tabbed graphics config */
+.tmac-graphics-config .tmac-mode-banner {
+  border: 1px solid var(--color-border-light-tertiary);
+  border-radius: 4px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  background: rgba(120, 120, 120, 0.08);
+}
+.tmac-graphics-config .tmac-mode-banner.on {
+  background: rgb(135 135 135 / 12%);
+  border-color: var(--color-border-highlight, #ff6400);
+}
+.tmac-graphics-config .tmac-mode-banner label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: bold;
+  cursor: pointer;
+}
+.tmac-graphics-config .tmac-mode-banner .hint {
+  margin: 4px 0 0 0;
+  font-size: 0.85em;
+  color: var(--color-text-dark-secondary);
+}
+.tmac-graphics-config .tmac-config-body {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.tmac-graphics-config .tmac-vertical-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 140px;
+  flex-shrink: 0;
+  padding: 4px;
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px solid var(--color-border-light-tertiary);
+  border-radius: 4px;
+}
+.tmac-graphics-config .tmac-vertical-tabs a {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 3px;
+  border-left: 3px solid transparent;
+  cursor: pointer;
+  color: inherit;
+  text-decoration: none;
+  font-size: 0.95em;
+}
+.tmac-graphics-config .tmac-vertical-tabs a:hover {
+  background: rgb(135 135 135 / 14%);
+}
+.tmac-graphics-config .tmac-vertical-tabs a.active {
+  background: rgb(135 135 135 / 18%);
+  border-left-color: var(--color-border-highlight, #ff6400);
+  font-weight: bold;
+}
+.tmac-graphics-config .tmac-vertical-tabs a.tmac-tab-inactive {
+  opacity: 0.45;
+  font-style: italic;
+}
+.tmac-graphics-config .tmac-vertical-tabs a.tmac-tab-inactive.active {
+  opacity: 0.7;
+}
+.tmac-graphics-config .tmac-vertical-tabs i {
+  width: 14px;
+  text-align: center;
+}
+.tmac-graphics-config .tmac-tab-content {
+  flex: 1;
+  min-width: 0;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 4px 6px;
+}
+.tmac-graphics-config .tmac-tab-content section {
+  display: none;
+}
+.tmac-graphics-config .tmac-tab-content .form-group {
+  margin-bottom: 8px;
+}
+.tmac-graphics-config .form-group.tmac-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.tmac-graphics-config .form-group.tmac-row > label:first-child {
+  flex: 0 0 90px;
+}
+.tmac-graphics-config .form-group.tmac-row .tmac-inline-label {
+  flex: 0 0 auto;
+  font-size: 0.88em;
+  color: var(--color-text-dark-secondary);
+  margin-left: 4px;
+}
+.tmac-graphics-config .form-group.tmac-row .tmac-num {
+  flex: 0 0 70px;
+  min-width: 0;
+}
+.tmac-graphics-config .form-group.tmac-row .tmac-num.tmac-num-wide {
+  flex: 0 0 120px;
+}
+.tmac-graphics-config .form-group.tmac-row select {
+  flex: 1 1 140px;
+  min-width: 0;
+}
+.tmac-graphics-config .form-group.tmac-row input[type="checkbox"] {
+  flex: 0 0 auto;
+}
+.tmac-graphics-config .form-group.tmac-row color-picker {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.tmac-graphics-config .tmac-unit {
+  font-size: 0.85em;
+  color: var(--color-text-dark-secondary);
+  margin: 0 4px;
+  white-space: nowrap;
+}
+.tmac-graphics-config .form-fields.tmac-xy {
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.tmac-graphics-config .form-fields.tmac-xy input[type="number"] {
+  flex: 0 1 70px;
+}
+.tmac-graphics-config .tmac-anim-toggle {
+  flex: 0 0 28px;
+  padding: 2px 6px;
+  margin-left: 4px;
+  cursor: pointer;
+}
+.tmac-graphics-config .tmac-anim-toggle.on {
+  background: rgba(200, 50, 50, 0.15);
+}
+.tmac-graphics-config .tmac-anim-editor {
+  border: 1px solid var(--color-border-light-tertiary);
+  border-radius: 4px;
+  padding: 6px 8px;
+  margin: 6px 0;
+  background: rgba(0, 0, 0, 0.02);
+}
+.tmac-graphics-config .tmac-anim-editor legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: bold;
+  padding: 0 4px;
+}
+.tmac-graphics-config .tmac-anim-editor legend .tmac-anim-toggle {
+  margin-left: auto;
+}
+/* Visual color animation editor */
+.tmac-graphics-config .tmac-anim-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 2px;
+}
+.tmac-graphics-config .tmac-anim-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.tmac-graphics-config .tmac-anim-controls input.tmac-anim-duration {
+  flex: 0 0 80px;
+}
+.tmac-graphics-config .tmac-anim-easings {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+}
+.tmac-graphics-config .tmac-anim-ease-btn {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tmac-graphics-config .tmac-anim-ease-btn.active {
+  background: rgb(135 135 135 / 18%);
+  box-shadow: inset 0 0 0 1px var(--color-border-highlight, #ff6400);
+}
+.tmac-graphics-config .tmac-anim-ease-btn svg {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
+  stroke-width: 10px;
+  fill: none;
+}
+.tmac-graphics-config .tmac-anim-track-wrap {
+  position: relative;
+  height: 32px;
+}
+.tmac-graphics-config .tmac-anim-track {
+  position: absolute;
+  top: 50%;
+  height: 20px;
+  width: 100%;
+  transform: translateY(-50%);
+  border: 1px solid var(--color-border-dark, #444);
+  border-radius: 3px;
+  cursor: copy;
+  user-select: none;
+}
+.tmac-graphics-config .tmac-anim-tracker {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  width: 3px;
+  background: #ff0000;
+  border-left: 1px solid rgba(0,0,0,0.7);
+  border-right: 1px solid rgba(0,0,0,0.7);
+  pointer-events: none;
+  left: 0%;
+}
+.tmac-graphics-config .tmac-anim-thumb {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 12px;
+  height: 28px;
+  border: 1px solid #fff;
+  box-shadow: 0 0 0 1px #000;
+  border-radius: 2px;
+  cursor: col-resize;
+}
+.tmac-graphics-config .tmac-anim-thumb.active {
+  outline: 3px solid var(--color-border-highlight, #ff6400);
+  z-index: 2;
+}
+.tmac-graphics-config .tmac-anim-selected {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 0;
+  border-top: 1px dashed var(--color-border-light-tertiary);
+}
+.tmac-graphics-config .tmac-anim-selected label {
+  font-size: 0.85em;
+  color: var(--color-text-dark-secondary);
+}
+.tmac-graphics-config .tmac-anim-selected input[type="number"] {
+  flex: 0 0 60px;
+}
+.tmac-graphics-config .tmac-anim-selected color-picker {
+  flex: 0 1 auto;
+}
+.tmac-graphics-config .tmac-action-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tmac-graphics-config .tmac-action-item {
+  border: 1px solid var(--color-border-light-tertiary);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.02);
+}
+.tmac-graphics-config .tmac-action-item.editing {
+  background: rgba(0, 0, 0, 0.05);
+}
+.tmac-graphics-config .tmac-action-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  cursor: default;
+}
+.tmac-graphics-config .tmac-action-trigger {
+  font-size: 0.75em;
+  background: var(--color-bg-option, rgba(0, 0, 0, 0.1));
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: monospace;
+}
+.tmac-graphics-config .tmac-action-summary {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.88em;
+}
+.tmac-graphics-config .tmac-action-row button {
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  line-height: 1;
+  cursor: pointer;
+}
+.tmac-graphics-config .tmac-action-edit {
+  padding: 8px;
+  border-top: 1px solid var(--color-border-light-tertiary);
+}
+.tmac-graphics-config .tmac-action-edit textarea {
+  width: 100%;
+  font-family: monospace;
+  font-size: 0.85em;
+  margin-top: 4px;
+}
+.tmac-graphics-config .tmac-action-add {
+  width: 100%;
+  padding: 6px;
+  cursor: pointer;
+}
+.tmac-graphics-config .tmac-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border-light-tertiary);
+}
+.tmac-graphics-config .tmac-footer button {
+  min-width: 100px;
+  padding: 6px 16px;
+}
+
+/* Template Library: docked next to Foundry sidebar */
+#templatemacro-library {
+  right: calc(var(--sidebar-width, 300px) + 12px) !important;
+  left: auto !important;
+  top: 12px !important;
+}
+
+.tmac-library-config .tmac-lib-tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--color-border-light-tertiary);
+}
+.tmac-library-config .tmac-lib-tabs a {
+  flex: 1;
+  text-align: center;
+  padding: 6px 10px;
+  cursor: pointer;
+  color: inherit;
+  text-decoration: none;
+  font-weight: bold;
+  font-size: 0.92em;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 4px 4px 0 0;
+  margin-bottom: -1px;
+}
+.tmac-library-config .tmac-lib-tabs a:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+.tmac-library-config .tmac-lib-tabs a.active {
+  background: rgb(135 135 135 / 18%);
+  border-color: var(--color-border-light-tertiary);
+  border-bottom-color: transparent;
+}
+
+.tmac-library-config .tmac-lib-active-banner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: rgb(135 135 135 / 18%);
+  border: 1px solid var(--color-border-highlight, #ff6400);
+  border-radius: 4px;
+  margin-bottom: 8px;
+  font-size: 0.88em;
+}
+.tmac-library-config .tmac-lib-active-banner button {
+  margin-left: auto;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  cursor: pointer;
+}
+.tmac-library-config .tmac-lib-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 10px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.tmac-library-config .tmac-lib-protected-icon {
+  margin-left: 6px;
+  font-size: 0.8em;
+  color: var(--color-text-dark-secondary);
+  opacity: 0.7;
+}
+.tmac-library-config .tmac-lib-toolbar {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.tmac-library-config .tmac-lib-toolbar button {
+  flex: 1;
+  padding: 4px;
+  cursor: pointer;
+  font-size: 0.88em;
+}
+.tmac-library-config .tmac-lib-toolbar-icons {
+  justify-content: flex-end;
+  gap: 2px;
+}
+.tmac-library-config .tmac-lib-toolbar-icons button {
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  line-height: 1;
+}
+.tmac-library-config .tmac-lib-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border-light-tertiary);
+  border-left: 4px solid var(--zone-color, #888);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.02);
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+.tmac-library-config .tmac-lib-card:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+.tmac-library-config .tmac-lib-card.active {
+  background: rgb(135 135 135 / 18%);
+  box-shadow: inset 0 0 0 1px var(--color-border-highlight, #ff6400);
+}
+.tmac-library-config .tmac-lib-card-icon {
+  flex: 0 0 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3em;
+  color: var(--zone-color, #888);
+}
+.tmac-library-config .tmac-lib-card-icon img {
+  max-width: 28px;
+  max-height: 28px;
+}
+.tmac-library-config .tmac-lib-svg-tint {
+  display: inline-block;
+  width: 28px;
+  height: 28px;
+  background-color: var(--tint, currentColor);
+  -webkit-mask: var(--mask-url) center / contain no-repeat;
+          mask: var(--mask-url) center / contain no-repeat;
+}
+.tmac-library-config .tmac-lib-card-info {
+  flex: 1;
+  min-width: 0;
+}
+.tmac-library-config .tmac-lib-card-name {
+  font-weight: bold;
+  font-size: 0.95em;
+}
+.tmac-library-config .tmac-lib-card-meta {
+  display: flex;
+  gap: 6px;
+  font-size: 0.78em;
+  color: var(--color-text-dark-secondary);
+  flex-wrap: wrap;
+}
+.tmac-library-config .tmac-lib-card-meta span {
+  background: rgba(0, 0, 0, 0.06);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.tmac-library-config .tmac-lib-card-actions {
+  display: flex;
+  gap: 2px;
+}
+.tmac-library-config .tmac-lib-card-actions button {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  cursor: pointer;
+}
+.tmac-library-config .tmac-lib-add {
+  width: 100%;
+  padding: 6px;
+  cursor: pointer;
+}
+

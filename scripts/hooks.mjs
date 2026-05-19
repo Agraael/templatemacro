@@ -11,6 +11,7 @@ import {
   renderTemplateMacroConfig,
   unregisterCallbacks
 } from "./templatemacro.mjs";
+import { terrainTopAt } from "./elevation-cull.mjs";
 
 // Create a button in a template's header.
 export function _createHeaderButton(config, buttons) {
@@ -38,13 +39,13 @@ export async function _updateToken(tokenDoc, update, context, userId) {
   const hasY = foundry.utils.hasProperty(update, "y");
   if (!hasX && !hasY) return;
 
-  // Skip intermediate ruler segments — only process the final one
+  // skip intermediate ruler segments, only process the final one
   if (context.rulerSegment && !context.lastRulerSegment) return;
 
   // Move any templates attached to this token by the same delta.
   const previousCoords2 = foundry.utils.getProperty(context, `${MODULE}.coords.previous`);
   if (previousCoords2) {
-    // Use update data for target coords — tokenDoc.x/y is unreliable during animation
+    // tokenDoc.x/y is unreliable during animation, prefer update data
     const targetX = update.x ?? previousCoords2.x;
     const targetY = update.y ?? previousCoords2.y;
     const dx = targetX - previousCoords2.x;
@@ -101,7 +102,7 @@ export async function _updateToken(tokenDoc, update, context, userId) {
   const staying = previous.filter(p => current.includes(p));
   // mapping of all grid cells (within templates) you moved through.
   const through = tokenDoc.parent.templates.reduce((acc, templateDoc) => {
-    const cells = findGrids(previousCoords, coords, templateDoc);
+    const cells = findGrids(previousCoords, coords, templateDoc, tokenDoc.elevation ?? 0);
     if (!cells.length) return acc;
     acc.push({
       templateId: templateDoc.id,
@@ -205,6 +206,16 @@ export function _preUpdateTemplate(templateDoc, update, context, userId) {
   };
   foundry.utils.setProperty(context, `${MODULE}.coords.previous`, coords);
 
+  // THT auto-elevation: shift elevation by the change in terrain top between old and new position
+  const auto = game.settings.get(MODULE, "thtAutoElevation");
+  const movingX = update.x !== undefined && update.x !== templateDoc.x;
+  const movingY = update.y !== undefined && update.y !== templateDoc.y;
+  if (auto && (movingX || movingY) && update.elevation === undefined && globalThis.terrainHeightTools) {
+    const oldTop = terrainTopAt(templateDoc.x, templateDoc.y);
+    const newTop = terrainTopAt(update.x ?? templateDoc.x, update.y ?? templateDoc.y);
+    const delta = newTop - oldTop;
+    if (delta !== 0) update.elevation = (templateDoc.elevation ?? 0) + delta;
+  }
 }
 export function _updateTemplate(templateDoc, update, context, userId) {
   const wasHidden = foundry.utils.getProperty(context, `${MODULE}.wasHidden`);

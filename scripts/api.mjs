@@ -1,19 +1,34 @@
 import { MODULE } from "./constants.mjs";
 import { callMacro, registerCallback, unregisterCallbacks } from "./templatemacro.mjs";
+import { cellOccludedByTerrain, getTemplateElevationBand, isInElevationBand, isInsideInnerCircle, isTemplateElevationGated } from "./elevation-cull.mjs";
 
-export function findGrids(A, B, templateDoc) {
+export function findGrids(A, B, templateDoc, tokenElevation = null) {
   const a = canvas.grid.getCenterPoint({ x: A.x, y: A.y });
   const b = canvas.grid.getCenterPoint({ x: B.x, y: B.y });
   const ray = new Ray(a, b);
   if (ray.distance === 0) return [];
-  
+
+  const gated = isTemplateElevationGated(templateDoc);
+  const band = gated ? getTemplateElevationBand(templateDoc) : null;
+  if (gated && tokenElevation !== null && !isInElevationBand(tokenElevation, band.base, band.range)) return [];
+
   const scene = templateDoc.parent;
   const gridCenter = scene.grid.size / 2;
   const locations = new Set();
   const spacer = scene.grid.type === CONST.GRID_TYPES.SQUARE ? 1.41 : 1;
   const nMax = Math.max(Math.floor(ray.distance / (spacer * Math.min(canvas.grid.sizeX, canvas.grid.sizeY))), 1);
   const tMax = Array.fromRange(nMax + 1).map(t => t / nMax);
-  
+
+  const addIfContained = (topLeft) => {
+    const cx = topLeft.x + gridCenter;
+    const cy = topLeft.y + gridCenter;
+    const contained = templateDoc.object.shape.contains(cx - templateDoc.object.center.x, cy - templateDoc.object.center.y);
+    if (!contained) return;
+    if (gated && cellOccludedByTerrain(cx, cy, band.base, band.range)) return;
+    if (isInsideInnerCircle(templateDoc, cx, cy)) return;
+    locations.add({ x: topLeft.x, y: topLeft.y });
+  };
+
   let prior = null;
   for (const [i, t] of tMax.entries()){
     const { x, y } = ray.project(t);
@@ -25,12 +40,7 @@ export function findGrids(A, B, templateDoc) {
       if (r0 === r1 && c0 === c1) continue;
     }
 
-    const topLeft1 = canvas.grid.getTopLeftPoint(offset1);
-    const contained = templateDoc.object.shape.contains(
-      topLeft1.x + gridCenter - templateDoc.object.center.x,
-      topLeft1.y + gridCenter - templateDoc.object.center.y
-    );
-    if (contained) locations.add({ x: topLeft1.x, y: topLeft1.y });
+    addIfContained(canvas.grid.getTopLeftPoint(offset1));
 
     prior = [r1, c1];
     if (i === 0) continue;
@@ -42,12 +52,7 @@ export function findGrids(A, B, templateDoc) {
       const th = tMax[i - 1] + (0.5 / nMax);
       const { x: xhp, y: yhp } = ray.project(th);
       const offsetH = canvas.grid.getOffset({ x: xhp, y: yhp });
-      const topLeftH = canvas.grid.getTopLeftPoint(offsetH);
-      const containedHalf = templateDoc.object.shape.contains(
-        topLeftH.x + gridCenter - templateDoc.object.center.x,
-        topLeftH.y + gridCenter - templateDoc.object.center.y
-      );
-      if (containedHalf) locations.add({ x: topLeftH.x, y: topLeftH.y });
+      addIfContained(canvas.grid.getTopLeftPoint(offsetH));
     }
   }
   return [...locations];
@@ -58,21 +63,31 @@ export function findContained(templateDoc) {
   const { x: tempx, y: tempy, object } = templateDoc;
   const contained = new Set();
   if (!object?.shape) return [];
-  
+
+  const gated = isTemplateElevationGated(templateDoc);
+  const band = gated ? getTemplateElevationBand(templateDoc) : null;
+
   for (const tokenDoc of templateDoc.parent.tokens) {
+    if (gated && !isInElevationBand(tokenDoc.elevation ?? 0, band.base, band.range)) continue;
     const { width, height, x: tokx, y: toky } = tokenDoc;
     const startX = width >= 1 ? 0.5 : width / 2;
     const startY = height >= 1 ? 0.5 : height / 2;
-    
-    for (let x = startX; x < width; x++) {
+
+    let hit = false;
+    let allOccluded = gated && !!globalThis.terrainHeightTools;
+    for (let x = startX; x < width && !hit; x++) {
       for (let y = startY; y < height; y++) {
-        const contains = object.shape.contains(tokx + x * size - tempx, toky + y * size - tempy);
-        if (contains) {
-          contained.add(tokenDoc.id);
-          break;
-        }
+        const cx = tokx + x * size;
+        const cy = toky + y * size;
+        if (!object.shape.contains(cx - tempx, cy - tempy)) continue;
+        if (gated && globalThis.terrainHeightTools && cellOccludedByTerrain(cx, cy, band.base, band.range)) continue;
+        if (isInsideInnerCircle(templateDoc, cx, cy)) continue;
+        allOccluded = false;
+        hit = true;
+        break;
       }
     }
+    if (hit && !allOccluded) contained.add(tokenDoc.id);
   }
   return [...contained];
 }
@@ -82,23 +97,32 @@ export function findContainers(tokenDoc, overridePos = null) {
   const { width, height } = tokenDoc;
   const tokx = overridePos?.x ?? tokenDoc.x;
   const toky = overridePos?.y ?? tokenDoc.y;
+  const tokElev = overridePos?.elevation ?? tokenDoc.elevation ?? 0;
   const containers = new Set();
-  
+
   for (const templateDoc of tokenDoc.parent.templates) {
     const { x: tempx, y: tempy, object } = templateDoc;
     if (!object?.shape) continue;
+    const gated = isTemplateElevationGated(templateDoc);
+    const band = gated ? getTemplateElevationBand(templateDoc) : null;
+    if (gated && !isInElevationBand(tokElev, band.base, band.range)) continue;
+
     const startX = width >= 1 ? 0.5 : width / 2;
     const startY = height >= 1 ? 0.5 : height / 2;
 
-    for (let x = startX; x < width; x++) {
+    let hit = false;
+    for (let x = startX; x < width && !hit; x++) {
       for (let y = startY; y < height; y++) {
-        const contains = object.shape.contains(tokx + x * size - tempx, toky + y * size - tempy);
-        if (contains) {
-          containers.add(templateDoc.id);
-          break;
-        }
+        const cx = tokx + x * size;
+        const cy = toky + y * size;
+        if (!object.shape.contains(cx - tempx, cy - tempy)) continue;
+        if (gated && globalThis.terrainHeightTools && cellOccludedByTerrain(cx, cy, band.base, band.range)) continue;
+        if (isInsideInnerCircle(templateDoc, cx, cy)) continue;
+        hit = true;
+        break;
       }
     }
+    if (hit) containers.add(templateDoc.id);
   }
   return [...containers];
 }
@@ -145,7 +169,6 @@ export function findContainers(tokenDoc, overridePos = null) {
  * @param {boolean} [hooks.trigger.asGM] - Execute the command as GM
  */
 export async function placeZone(options = {}, hooks = {}) {
-  // Check for specific zone types before applying general defaults
   if (options.dangerous) {
     return await placeDangerousZone({ ...options, dangerous: null }, options.dangerous.damageType, options.dangerous.damageValue, hooks);
   }
@@ -156,7 +179,7 @@ export async function placeZone(options = {}, hooks = {}) {
     return await placeDifficultTerrainZone({ ...options, difficultTerrain: null }, options.difficultTerrain.movementPenalty, options.difficultTerrain.isFlatPenalty, hooks);
   }
 
-  // Apply status zone visual defaults so all zones share the same base look
+  // status-zone defaults shared as the base look for all zones
   const _zoneDefaults = {
     fillType: game.settings.get("templatemacro", "statusZoneDefaultFillType"),
     fillTexture: game.settings.get("templatemacro", "statusZoneDefaultTexture"),
@@ -186,13 +209,14 @@ export async function placeZone(options = {}, hooks = {}) {
     fillAnimationAngle = 0,
     fillPulse = false,
     fillPulseSpeed = 1,
-    centerLabel = ""
+    centerLabel = "",
+    tmacGraphics = null
   } = _merged;
 
+  const effFillColor = tmacGraphics?.fillColor ?? fillColor;
+  const effBorderColor = tmacGraphics?.lineColor ?? borderColor;
+
   let adjustedSize = size;
-  if (game.system.id === "lancer" && [2, 3, 4, 5].includes(canvas.grid.type)) {
-    adjustedSize += 0.33;
-  }
 
   let template = null;
   const { flags, pendingCallbacks } = _buildTemplateMacroFlags(hooks);
@@ -200,7 +224,8 @@ export async function placeZone(options = {}, hooks = {}) {
     ...(flags.templatemacro || {}),
     fillType, fillTexture, fillSize, fillOpacity, borderOpacity,
     fillAnimation, fillAnimationSpeed, fillAnimationAngle, fillPulse, fillPulseSpeed,
-    centerLabel
+    centerLabel,
+    ...(tmacGraphics || {})
   };
 
   if (game.system.id === "lancer" && game.lancer?.canvas?.WeaponRangeTemplate) {
@@ -208,7 +233,7 @@ export async function placeZone(options = {}, hooks = {}) {
       const templatePreview = game.lancer.canvas.WeaponRangeTemplate.fromRange({ type, val: Math.max(adjustedSize, 0) });
 
       if (x !== undefined && y !== undefined) {
-        // Direct placement at specified coordinates — same structure as interactive, no click required
+        // direct placement at x,y skips the click prompt
         const baseData = templatePreview.document?.toObject() ?? {};
         const [created] = await canvas.scene.createEmbeddedDocuments("MeasuredTemplate", [{ ...baseData, x, y, user: game.user.id }]);
         template = created ?? null;
@@ -218,8 +243,8 @@ export async function placeZone(options = {}, hooks = {}) {
 
       if (template) {
         await template.update({
-          fillColor,
-          borderColor,
+          fillColor: effFillColor,
+          borderColor: effBorderColor,
           texture: texture || template.texture,
           flags: {
             ...template.flags,
@@ -232,7 +257,7 @@ export async function placeZone(options = {}, hooks = {}) {
         });
         await template.update({ "flags.tokenmagic.templateData.opacity": 0 });
 
-        // Manually trigger whenCreated for Lancer because initial placement doesn't have flags
+        // Lancer placement happens before flags are stamped, so fire whenCreated by hand
         if (flags.templatemacro?.whenCreated) {
           const { id: gmId } = game.users.find(u => u.active && u.isGM) ?? {};
           callMacro(template, "whenCreated", { gmId, userId: game.user.id, coords: { previous: null, current: { x: template.x, y: template.y } } });
@@ -249,8 +274,8 @@ export async function placeZone(options = {}, hooks = {}) {
       user: game.user.id,
       x, y,
       distance: adjustedSize,
-      fillColor,
-      borderColor,
+      fillColor: effFillColor,
+      borderColor: effBorderColor,
       texture,
       flags: {
         ...flags,
@@ -261,7 +286,6 @@ export async function placeZone(options = {}, hooks = {}) {
     console.warn("placeZone requires x,y coords for non-Lancer systems.");
     return null;
   }
-  // Register any pending function callbacks for the created template
   if (template && pendingCallbacks.length > 0) {
     for (const cb of pendingCallbacks) {
       registerCallback(template.id, cb.trigger, cb.fn, cb.asGM);
@@ -498,14 +522,13 @@ export async function placeDifficultTerrainZone(options = {}, movementPenalty = 
 function _buildTemplateMacroFlags(hooks) {
   if (!hooks || Object.keys(hooks).length === 0) return { flags: {}, pendingCallbacks: [] };
 
-  // Expand onInside/onLeave shortcuts into individual hooks
   if (hooks.onInside) {
     const insideFn = hooks.onInside;
     const asGM = insideFn.asGM ?? true;
     const hookDef = typeof insideFn.function === 'function'
       ? { function: insideFn.function, asGM }
       : (insideFn.command ? { command: insideFn.command, asGM } : { function: insideFn, asGM });
-    // Build a created/moved wrapper that scans all contained tokens
+    // wrap for created/moved: iterate the contained tokens and run innerFn per token
     const wrapForScan = (innerFn) => {
       return async function (templateDoc, scene) {
         const tmApi = game.modules.get('templatemacro')?.api;
@@ -526,7 +549,6 @@ function _buildTemplateMacroFlags(hooks) {
       if (!hooks.entered) hooks.entered = hookDef;
     } else if (hookDef.command) {
       if (!hooks.entered) hooks.entered = hookDef;
-      // For command-based, created/moved need a scene-scan wrapper (similar to statusEffects pattern)
     }
     delete hooks.onInside;
   }
@@ -554,11 +576,9 @@ function _buildTemplateMacroFlags(hooks) {
     const t = map[k] || (Object.values(map).includes(k) ? k : null);
     if (!t) continue;
 
-    // Function-based hook — register in-memory AND persist as flag command
+    // function hook: register in-memory and also persist its body as a flag command so it survives reloads
     if (typeof c.function === 'function') {
       pendingCallbacks.push({ trigger: t, fn: c.function, asGM: c.asGM || false });
-      // Extract function body and store as a persistent string command so it
-      // survives page reloads (the runtime callback is in-memory only).
       if (!c.command) {
         const fnStr = c.function.toString();
         const body = fnStr.replace(/^(?:async\s+)?function[^(]*\([^)]*\)\s*\{/, '').replace(/\}$/, '');
@@ -566,7 +586,6 @@ function _buildTemplateMacroFlags(hooks) {
       }
     }
 
-    // String-based hook — store in flags as before
     if (c.command) {
       flags.templatemacro[t] = { command: c.command, asGM: c.asGM || false };
     }

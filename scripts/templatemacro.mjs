@@ -1,28 +1,13 @@
 import {MODULE, TRIGGERS} from "./constants.mjs";
 
-/**
- * Runtime callback registry for injected functions.
- * Key: `${templateDocId}::${trigger}` (e.g. "abc123::whenEntered")
- * Value: { fn: Function, asGM: boolean }
- */
+// key: `${templateDocId}::${trigger}`
 const _callbackRegistry = new Map();
 
-/**
- * Register a runtime callback for a specific template trigger.
- * @param {string} templateId   The MeasuredTemplateDocument ID.
- * @param {string} trigger      The trigger name (e.g. "whenEntered").
- * @param {Function} fn         The function to execute: (template, scene, token, context) => {}
- * @param {boolean} [asGM=false] Whether this should only execute for the GM user.
- */
 export function registerCallback(templateId, trigger, fn, asGM = false) {
   const key = `${templateId}::${trigger}`;
   _callbackRegistry.set(key, { fn, asGM });
 }
 
-/**
- * Unregister all runtime callbacks for a given template.
- * @param {string} templateId   The MeasuredTemplateDocument ID.
- */
 export function unregisterCallbacks(templateId) {
   for (const key of [..._callbackRegistry.keys()]) {
     if (key.startsWith(`${templateId}::`)) {
@@ -31,25 +16,18 @@ export function unregisterCallbacks(templateId) {
   }
 }
 
-export function renderTemplateMacroConfig(templateDocument) {
-  new TemplateMacroConfig(templateDocument, {}).render(true);
+export function renderTemplateMacroConfig(document) {
+  if (document?.documentName === "MeasuredTemplate") {
+    document.sheet.render(true);
+    return;
+  }
+  new TemplateMacroConfig(document, {}).render(true);
 }
 
-/**
- * Execute macros.
- * First checks the runtime callback registry for an injected function.
- * Falls back to flag-based string commands if no function is registered.
- * @param {MeasuredTemplateDocument} templateDoc      The template document.
- * @param {string} whenWhat                           The trigger.
- * @param {object} context                            Object with assorted data needed to run the script.
- * @param {string} context.gmId                       The user id of the first active gm found.
- * @param {string} context.userId                     The user id of the triggering user, the one calling the script.
- */
 export function callMacro(templateDoc, whenWhat, context) {
   const scene = templateDoc.parent;
   const token = scene.tokens.get(context.tokenId)?.object ?? null;
 
-  // Check runtime callback registry first
   const registryKey = `${templateDoc.id}::${whenWhat}`;
   const registered = _callbackRegistry.get(registryKey);
   if (registered) {
@@ -61,33 +39,103 @@ export function callMacro(templateDoc, whenWhat, context) {
     } catch (e) {
       console.error(`templatemacro | Error in registered callback for ${whenWhat} on template ${templateDoc.id}:`, e);
     }
-    // Runtime callback handled it — skip the flag-based command (which is the
-    // auto-persisted copy of this same function, used only after page reload).
+    // registered callback handled it; the flag-based command is the same function persisted for reloads
     return;
   }
 
-  // Fall back to flag-based string commands
   const script = templateDoc.getFlag(MODULE, `${whenWhat}.command`);
   const asGM = templateDoc.getFlag(MODULE, `${whenWhat}.asGM`);
-  if (!script) return;
-  const body = `(async()=>{
-    ${script}
-  })();`;
+  if (script) {
+    const id = asGM ? context.gmId : context.userId;
+    if (game.user.id === id) {
+      templateDoc.object?.refresh();
+      const body = `(async()=>{\n${script}\n})();`;
+      const fn = Function("template", "scene", "token", body);
+      try { fn.call(context, templateDoc, scene, token); }
+      catch (e) { console.error(`templatemacro | Error in legacy ${whenWhat} script:`, e); }
+    }
+  }
 
-  const id = asGM ? context.gmId : context.userId;
-  if (game.user.id !== id) return;
-  templateDoc.object?.refresh();
-  const fn = Function("template", "scene", "token", body);
-
-  fn.call(context, templateDoc, scene, token);
+  const actions = templateDoc.getFlag(MODULE, "actions") ?? [];
+  const sourceToken = _resolveTemplateSourceToken(templateDoc);
+  for (const action of actions) {
+    if (action.trigger !== whenWhat) continue;
+    if (!_targetFilterMatches(action.targetFilter ?? "ALL", token, sourceToken)) continue;
+    const id = action.asGM ? context.gmId : context.userId;
+    if (game.user.id !== id) continue;
+    templateDoc.object?.refresh();
+    try {
+      if (action.actionType === "code" && action.code) {
+        const body = `(async()=>{\n${action.code}\n})();`;
+        const fn = Function("template", "scene", "token", body);
+        fn.call(context, templateDoc, scene, token);
+      } else if (action.actionType === "macro" && action.macroUuid) {
+        const macro = fromUuidSync(action.macroUuid);
+        if (macro?.execute) macro.execute({ template: templateDoc, scene, token, actor: token?.actor });
+      } else if (action.actionType === "effect" && action.effectName) {
+        if (!token?.actor) continue;
+        const a = token.actor;
+        const tid = templateDoc.id;
+        const sid = action.effectName;
+        if (action.effectMode === "remove") {
+          const e = a.effects.find(x => x.statuses.has(sid) && x.getFlag(MODULE, "sourceTemplate") === tid);
+          if (e) a.deleteEmbeddedDocuments("ActiveEffect", [e.id]);
+        } else {
+          const exists = a.effects.find(x => x.statuses.has(sid) && x.getFlag(MODULE, "sourceTemplate") === tid);
+          if (!exists) {
+            const def = CONFIG.statusEffects.find(x => x.id === sid);
+            if (def) {
+              const name = game.i18n.localize(def.name || def.label || sid);
+              a.createEmbeddedDocuments("ActiveEffect", [{ ...def, name, statuses: [sid], "flags.templatemacro.sourceTemplate": tid }]);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.error(`templatemacro | Error in action (${action.trigger} / ${action.actionType}):`, e);
+    }
+  }
 }
 
-/**
- * Get the id of user who owns a token, but only if they are active.
- * This method prefers a player owner.
- * @param {TokenDocument} token     A token document.
- * @returns {string}                The id of a user.
- */
+function _resolveTemplateSourceToken(templateDoc) {
+  if (!templateDoc) return null;
+  const scene = templateDoc.parent;
+  const attachedId = templateDoc.getFlag(MODULE, "attachedTokenId");
+  if (attachedId) {
+    const t = scene?.tokens.get(attachedId)?.object;
+    if (t) return t;
+  }
+  const user = game.users.get(templateDoc.user) ?? game.user;
+  return user?.character?.getActiveTokens?.()[0] ?? null;
+}
+
+function _targetFilterMatches(filterId, targetToken, sourceToken) {
+  if (!filterId || filterId === "ALL") return true;
+  if (!targetToken) return false;
+  if (filterId.startsWith("ACTORTYPE_")) {
+    return targetToken.actor?.type === filterId.slice("ACTORTYPE_".length);
+  }
+  if (filterId.startsWith("TEAM_")) {
+    const teamId = filterId.slice("TEAM_".length);
+    const tokenTeamId = targetToken.actor?.getFlag("token-factions", "team");
+    return tokenTeamId === teamId;
+  }
+  const disp = _resolveDisposition(targetToken, sourceToken);
+  if (filterId === "FRIENDLY") return disp === CONST.TOKEN_DISPOSITIONS.FRIENDLY;
+  if (filterId === "NEUTRAL") return disp === CONST.TOKEN_DISPOSITIONS.NEUTRAL;
+  if (filterId === "HOSTILE") return disp === CONST.TOKEN_DISPOSITIONS.HOSTILE;
+  return true;
+}
+
+function _resolveDisposition(target, source) {
+  const tf = game.modules.get("token-factions")?.api;
+  if (tf && typeof tf.getDisposition === "function" && source) {
+    try { return tf.getDisposition(source, target); }
+    catch { /* fall through */ }
+  }
+  return target.document.disposition;
+}
+
 export function _getFirstOwnerId(token) {
   const player = game.users.find(u => !u.isGM && u.active && token.testUserPermission(u, "OWNER"));
   if (player) return player.id;
@@ -114,7 +162,6 @@ export class TemplateMacroConfig extends MacroConfig {
     return `${MODULE}-${this.object.id}`;
   }
 
-  /** @override */
   async getData() {
     const data = await super.getData();
     data.name = `${game.i18n.localize("DOCUMENT.MeasuredTemplate")}: ${this.object.id}`;
@@ -132,7 +179,6 @@ export class TemplateMacroConfig extends MacroConfig {
     return data;
   }
 
-  /** @override */
   async _updateObject(event, formData) {
     for (const trigger of TRIGGERS) {
       if (!formData[`flags.${MODULE}.${trigger}.command`]) {
@@ -144,7 +190,6 @@ export class TemplateMacroConfig extends MacroConfig {
     return this.object.update(formData);
   }
 
-  /** @override */
   async _renderInner(data) {
     if (this.initial) this._tabs[0].active = this.initial;
     return super._renderInner(data);

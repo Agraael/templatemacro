@@ -1,3 +1,119 @@
+import { LINE_TYPES } from "./constants.mjs";
+import { sampleColorAnimation } from "./color-animation.mjs";
+import { drawDashedPolygon } from "./drawing.mjs";
+import { cellOccludedByTerrain, getTemplateElevationBand, isTemplateElevationGated } from "./elevation-cull.mjs";
+
+function _terrainCullFilterFor(templateDoc) {
+  if (!isTemplateElevationGated(templateDoc) || !globalThis.terrainHeightTools) return null;
+  const { base, range } = getTemplateElevationBand(templateDoc);
+  return (cx, cy) => !cellOccludedByTerrain(cx, cy, base, range);
+}
+
+function _innerCircleShape(templateDoc) {
+  if (templateDoc?.t !== "circle") return null;
+  const inner = Number(templateDoc.getFlag?.(MODULE, "innerRadius") ?? 0);
+  if (inner <= 0) return null;
+  return new PIXI.Polygon(canvas.grid.getCircle({ x: 0, y: 0 }, inner));
+}
+
+function _innerCircleFilterFor(templateDoc) {
+  const shape = _innerCircleShape(templateDoc);
+  if (!shape) return null;
+  const ox = templateDoc.x;
+  const oy = templateDoc.y;
+  // mirror Foundry's outer-circle 9-sample inclusion so the hole sizes the same way the outer does
+  return (cx, cy) => {
+    for (let dx = -0.5; dx <= 0.5; dx += 0.5) {
+      for (let dy = -0.5; dy <= 0.5; dy += 0.5) {
+        if (shape.contains(cx - ox + dx, cy - oy + dy)) return false;
+      }
+    }
+    return true;
+  };
+}
+
+function _composeFilters(...filters) {
+  const live = filters.filter(Boolean);
+  if (!live.length) return null;
+  return (cx, cy) => live.every(f => f(cx, cy));
+}
+
+function _cellFilterFor(templateDoc) {
+  return _composeFilters(_terrainCullFilterFor(templateDoc), _innerCircleFilterFor(templateDoc));
+}
+
+// templates with the same non-empty label and matching visual fingerprint merge:
+// their cells render once each, their shared edges suppress, joined as a single zone.
+function _mergeFingerprint(doc) {
+  const label = doc.getFlag?.("templatemacro", "centerLabel") ?? "";
+  if (!label) return null;
+  const flag = (k, fb) => doc.getFlag?.("templatemacro", k) ?? fb;
+  return JSON.stringify({
+    label,
+    lineType: flag("lineType", 1),
+    lineColor: flag("lineColor", doc.borderColor),
+    lineWidth: flag("lineWidth", 2),
+    lineOpacity: flag("lineOpacity", 0.5),
+    lineDashSize: flag("lineDashSize", 15),
+    lineGapSize: flag("lineGapSize", 10),
+    fillType: flag("fillType", 1),
+    fillColor: flag("fillColor", doc.fillColor),
+    fillOpacity: flag("fillOpacity", 0.25),
+    fillTexture: flag("fillTexture", "")
+  });
+}
+
+function _cellKey(cx, cy) {
+  return `${Math.round(cx * 10)},${Math.round(cy * 10)}`;
+}
+
+// returns the set of cell keys "owned by another template" earlier in id order for the same group.
+// drawing routines skip those cells (so each cell renders once per group), and edge counts include them.
+function _refreshMergeSiblings(doc) {
+  const fp = _mergeFingerprint(doc);
+  if (!fp) return;
+  const all = canvas.templates?.placeables ?? [];
+  for (const t of all) {
+    if (!t?.document || t.document.id === doc.id) continue;
+    if (_mergeFingerprint(t.document) === fp) t.refresh?.();
+  }
+}
+
+function _groupOwnership(template) {
+  const fp = _mergeFingerprint(template.document);
+  if (!fp) return { skipKeys: null, unionCellShapes: null };
+  const all = canvas.templates?.placeables ?? [];
+  const siblings = all.filter(t => t !== template && t?.document && _mergeFingerprint(t.document) === fp);
+  if (!siblings.length) return { skipKeys: null, unionCellShapes: null };
+  const myId = template.document.id ?? "";
+  const skipKeys = new Set();
+  const grid = canvas.grid;
+  // build the deduped union of group cells; each physical cell appears once
+  const unionMap = new Map();
+  const addCells = (t, isEarlier) => {
+    if (!t?.shape) return;
+    let positions = [];
+    try { positions = t._getGridHighlightPositions?.() ?? []; }
+    catch { return; }
+    const keep = _cellFilterFor(t.document);
+    for (const { x, y } of positions) {
+      const cx = x + (grid.sizeX / 2);
+      const cy = y + (grid.sizeY / 2);
+      if (keep && !keep(cx, cy)) continue;
+      const key = _cellKey(cx, cy);
+      if (isEarlier) skipKeys.add(key);
+      if (!unionMap.has(key)) {
+        const points = grid.getShape();
+        for (const p of points) { p.x += cx; p.y += cy; }
+        unionMap.set(key, { points });
+      }
+    }
+  };
+  for (const sib of siblings) addCells(sib, (sib.document.id ?? "") < myId);
+  addCells(template, false);
+  return { skipKeys, unionCellShapes: [...unionMap.values()] };
+}
+
 const MODULE = "templatemacro";
 export const DEFAULT_PATTERN_TEXTURE = "modules/templatemacro/textures/hatching.png";
 export const FILL_TYPES = { NONE: 0, SOLID: 1, PATTERN: 2 };
@@ -5,17 +121,9 @@ export const FILL_TYPES = { NONE: 0, SOLID: 1, PATTERN: 2 };
 const textureCache = new Map();
 const animationState = new Map();
 
-// ---------------------------------------------------------------------------
-// Center label rendering
-// Text lives in a container added to canvas.interface.grid (GridLayer, zIndex 0
-// in InterfaceCanvasGroup) as a sibling AFTER the highlight sub-container.
-// This renders text above the fill highlights but below the TemplateLayer
-// (zIndex 400) which holds template borders, selection rings, etc.
-// Token images live in canvas.primary which is always below canvas.interface,
-// the same constraint that makes fill render above token images.
-// ---------------------------------------------------------------------------
+// Labels sit on canvas.interface.grid so they render above fills, below the TemplateLayer.
 
-const centerLabelObjects = new Map(); // templateId → PreciseText (for delete cleanup)
+const centerLabelObjects = new Map();
 let _tmLabelLayer = null;
 
 function _ensureLabelLayer() {
@@ -26,7 +134,12 @@ function _ensureLabelLayer() {
 }
 
 function _refreshCenterLabel(template) {
-  const label = template.document.getFlag(MODULE, "centerLabel") ?? "";
+  const ownLabel = template.document.getFlag(MODULE, "centerLabel") ?? "";
+  const fallback = game.settings.get(MODULE, "defaultCenterLabel") ?? "";
+  const baseLabel = ownLabel || fallback;
+  const elev = template.document.elevation ?? 0;
+  const elevSuffix = (baseLabel && elev !== 0) ? ` ${elev > 0 ? "↑" : "↓"}${Math.abs(elev)}` : "";
+  const label = baseLabel ? `${baseLabel}${elevSuffix}` : "";
   const labelSize = game.settings.get(MODULE, "centerLabelSize") ?? 12;
 
   if (!label) {
@@ -54,8 +167,7 @@ function _refreshCenterLabel(template) {
     template._tmCenterLabel.anchor.set(0.5, 0.5);
     _ensureLabelLayer().addChild(template._tmCenterLabel);
     centerLabelObjects.set(template.id, template._tmCenterLabel);
-    // Clean up when the template PIXI object is destroyed (e.g. drag preview teardown),
-    // which does not fire deleteMeasuredTemplate.
+    // drag-preview teardown does not fire deleteMeasuredTemplate
     template.once("destroyed", () => {
       const text = template._tmCenterLabel;
       if (text && !text.destroyed) {
@@ -64,7 +176,6 @@ function _refreshCenterLabel(template) {
       }
       template._tmCenterLabel = null;
       centerLabelObjects.delete(template.id);
-      // Restore original's label now that the drag clone is gone.
       if (template._original?._tmCenterLabel) {
         template._original._tmCenterLabel.visible = true;
       }
@@ -74,7 +185,7 @@ function _refreshCenterLabel(template) {
   template._tmCenterLabel.style.fontSize = labelSize;
   template._tmCenterLabel.text = label;
   template._tmCenterLabel.position.set(template.document.x, template.document.y);
-  // If this is a drag clone, keep the original's label hidden for the duration of the drag.
+  // hide the original's label while a drag clone is showing
   if (template._original?._tmCenterLabel) {
     template._original._tmCenterLabel.visible = false;
   }
@@ -100,13 +211,16 @@ function stopAnimation(template) {
 
 function animationTick(template, dt) {
   const doc = template.document;
-  if (!doc || !shouldUsePatternFill(doc)) {
+  if (!doc || !shouldUseCustomRender(doc)) {
     stopAnimation(template);
     return;
   }
 
   const config = getPatternFillConfig(doc);
-  if (!config.fillAnimation && !config.fillPulse) {
+  const hasAnyAnim = config.fillAnimation || config.fillPulse
+    || !!config.lineColorAnimation || !!config.fillColorAnimation
+    || !!config.fillTextureOffsetAnimation || config.lineDashOffsetAnimation !== 0;
+  if (!hasAnyAnim) {
     stopAnimation(template);
     return;
   }
@@ -120,13 +234,25 @@ function animationTick(template, dt) {
     state.offset.x += Math.cos(angle) * speed * dt;
     state.offset.y += Math.sin(angle) * speed * dt;
   }
+  if (config.fillTextureOffsetAnimation) {
+    state.offset.x += (config.fillTextureOffsetAnimation.x ?? 0) * dt / 60;
+    state.offset.y += (config.fillTextureOffsetAnimation.y ?? 0) * dt / 60;
+  }
 
   if (config.fillPulse) {
     const pulseSpeed = config.fillPulseSpeed ?? 1;
     state.pulseTime += pulseSpeed * dt * 0.1;
   }
 
+  if (config.lineDashOffsetAnimation !== 0) {
+    state.dashOffset = (state.dashOffset ?? 0) + config.lineDashOffsetAnimation * dt / 60;
+  }
+
   template.renderFlags.set({ refreshGrid: true });
+}
+
+function getDashOffset(templateId) {
+  return animationState.get(templateId)?.dashOffset ?? 0;
 }
 
 function getAnimationOffset(templateId) {
@@ -155,22 +281,69 @@ export function shouldUsePatternFill(templateDoc) {
   return templateDoc.getFlag(MODULE, "fillType") == FILL_TYPES.PATTERN;
 }
 
+export function shouldUseCustomRender(templateDoc) {
+  const explicit = templateDoc.getFlag(MODULE, "useCustomRender");
+  if (explicit === true) return true;
+  if (explicit === false) return false;
+  // unset on legacy templates: infer from features
+  const c = getPatternFillConfig(templateDoc);
+  return c.fillType === FILL_TYPES.PATTERN
+    || c.lineType === LINE_TYPES.DASHED
+    || c.lineType === LINE_TYPES.NONE
+    || !!c.lineColorAnimation
+    || !!c.fillColorAnimation
+    || !!c.fillTextureOffsetAnimation
+    || !!c.fillAnimation
+    || !!c.fillPulse;
+}
+
 export function getPatternFillConfig(templateDoc) {
-  const fillSize = templateDoc.getFlag(MODULE, "fillSize") ?? 0.5;
+  const flag = (k, fb) => templateDoc.getFlag(MODULE, k) ?? fb;
+  const legacyFillSize = templateDoc.getFlag(MODULE, "fillSize");
+  const fallbackScale = legacyFillSize != null ? { x: legacyFillSize * 100, y: legacyFillSize * 100 } : { x: 100, y: 100 };
   return {
-    fillType: templateDoc.getFlag(MODULE, "fillType") ?? FILL_TYPES.SOLID,
-    fillTexture: templateDoc.getFlag(MODULE, "fillTexture") ?? DEFAULT_PATTERN_TEXTURE,
-    fillTextureScale: { x: fillSize * 100, y: fillSize * 100 },
-    fillTextureOffset: { x: 0, y: 0 },
-    fillColor: templateDoc.fillColor ?? "#000000",
-    fillOpacity: templateDoc.getFlag(MODULE, "fillOpacity") ?? 0.25,
-    borderOpacity: templateDoc.getFlag(MODULE, "borderOpacity") ?? 0.5,
-    fillAnimation: templateDoc.getFlag(MODULE, "fillAnimation") ?? false,
-    fillAnimationSpeed: templateDoc.getFlag(MODULE, "fillAnimationSpeed") ?? 0.5,
-    fillAnimationAngle: templateDoc.getFlag(MODULE, "fillAnimationAngle") ?? 0,
-    fillPulse: templateDoc.getFlag(MODULE, "fillPulse") ?? false,
-    fillPulseSpeed: templateDoc.getFlag(MODULE, "fillPulseSpeed") ?? 1
+    fillType: flag("fillType", FILL_TYPES.SOLID),
+    fillTexture: flag("fillTexture", DEFAULT_PATTERN_TEXTURE),
+    fillTextureScale: flag("fillTextureScale", fallbackScale),
+    fillTextureOffset: flag("fillTextureOffset", { x: 0, y: 0 }),
+    fillTextureOffsetAnimation: flag("fillTextureOffsetAnimation", null),
+    fillColor: flag("fillColor", templateDoc.fillColor ?? "#000000"),
+    fillOpacity: flag("fillOpacity", 0.25),
+    fillColorAnimation: flag("fillColorAnimation", null),
+    borderOpacity: flag("borderOpacity", 0.5),
+    lineType: flag("lineType", LINE_TYPES.SOLID),
+    lineWidth: flag("lineWidth", 2),
+    lineColor: flag("lineColor", templateDoc.borderColor ?? "#000000"),
+    lineOpacity: flag("lineOpacity", flag("borderOpacity", 0.5)),
+    lineDashSize: flag("lineDashSize", 15),
+    lineGapSize: flag("lineGapSize", 10),
+    lineDashOffsetAnimation: flag("lineDashOffsetAnimation", 0),
+    lineColorAnimation: flag("lineColorAnimation", null),
+    radiusOffset: flag("radiusOffset", 0),
+    // legacy
+    fillAnimation: flag("fillAnimation", false),
+    fillAnimationSpeed: flag("fillAnimationSpeed", 0.5),
+    fillAnimationAngle: flag("fillAnimationAngle", 0),
+    fillPulse: flag("fillPulse", false),
+    fillPulseSpeed: flag("fillPulseSpeed", 1)
   };
+}
+
+function sampleEffectiveColors(config) {
+  const now = performance.now();
+  let lineColorHex = config.lineColor;
+  let lineAlpha = config.lineOpacity;
+  let fillColorHex = config.fillColor;
+  let fillAlpha = config.fillOpacity;
+  if (config.lineColorAnimation) {
+    const s = sampleColorAnimation(config.lineColorAnimation, now);
+    if (s) { lineColorHex = `#${s.color.toString(16).padStart(6, "0")}`; lineAlpha = s.alpha; }
+  }
+  if (config.fillColorAnimation) {
+    const s = sampleColorAnimation(config.fillColorAnimation, now);
+    if (s) { fillColorHex = `#${s.color.toString(16).padStart(6, "0")}`; fillAlpha = s.alpha; }
+  }
+  return { lineColorHex, lineAlpha, fillColorHex, fillAlpha };
 }
 
 function getCachedTexture(path) {
@@ -186,49 +359,139 @@ function getCachedTexture(path) {
 }
 
 function drawSolidFallback(template, config) {
-  const doc = template.document;
   const highlightLayer = canvas.interface.grid.getHighlightLayer(template.highlightId);
   if (!highlightLayer) return;
 
-  const fillColor = Color.from(config.fillColor);
-  const borderColor = Color.from(doc.borderColor ?? "#000000");
+  const { lineColorHex, lineAlpha, fillColorHex, fillAlpha } = sampleEffectiveColors(config);
+  const fillColor = Color.from(fillColorHex);
+  const lineColor = Color.from(lineColorHex);
+  const drawLine = config.lineType !== LINE_TYPES.NONE;
+  const drawFill = config.fillType !== FILL_TYPES.NONE;
+  const effectiveFillAlpha = config.fillPulse ? getPulsedFillOpacity(template.id, fillAlpha) : fillAlpha;
 
-  // Gridless: draw directly on the template shape.
   if (canvas.grid.type === CONST.GRID_TYPES.GRIDLESS) {
     const shape = template._getGridHighlightShape?.() ?? template.shape;
     if (!shape) return;
-    highlightLayer.beginFill(fillColor, config.fillOpacity * 0.5);
-    highlightLayer.lineStyle(2, borderColor, config.borderOpacity);
-    highlightLayer.drawShape(shape);
-    highlightLayer.endFill();
+    if (drawFill) {
+      highlightLayer.beginFill(fillColor, effectiveFillAlpha);
+      highlightLayer.lineStyle(0);
+      highlightLayer.drawShape(shape);
+      highlightLayer.endFill();
+    }
+    if (drawLine) {
+      const gfx = _getBorderGfx(template);
+      if (gfx) {
+        gfx.clear();
+        if (config.lineType === LINE_TYPES.SOLID) {
+          gfx.lineStyle(config.lineWidth, lineColor, lineAlpha);
+          gfx.drawShape(shape);
+        } else if (config.lineType === LINE_TYPES.DASHED) {
+          _drawDashedShapeOutline(template, shape, config, lineColor, lineAlpha, template.id);
+        }
+      }
+    } else {
+      _destroyBorderGfx(template);
+    }
     return;
   }
 
   const grid = canvas.grid;
   const positions = template._getGridHighlightPositions();
+  const cellShapes = [];
+  const keep = _cellFilterFor(template.document);
+  const { skipKeys, unionCellShapes } = _groupOwnership(template);
 
   for (const { x, y } of positions) {
     const cx = x + (grid.sizeX / 2);
     const cy = y + (grid.sizeY / 2);
+    if (keep && !keep(cx, cy)) continue;
+    const key = _cellKey(cx, cy);
+    if (skipKeys?.has(key)) continue;
     const points = grid.getShape();
     for (const point of points) { point.x += cx; point.y += cy; }
-
     const shape = new PIXI.Polygon(points);
-    highlightLayer.beginFill(fillColor, config.fillOpacity * 0.5);
-    highlightLayer.drawShape(shape);
-    highlightLayer.endFill();
+    cellShapes.push({ shape, points });
+
+    if (drawFill) {
+      highlightLayer.beginFill(fillColor, effectiveFillAlpha);
+      highlightLayer.drawShape(shape);
+      highlightLayer.endFill();
+    }
   }
 
-  highlightLayer.lineStyle(2, borderColor, config.borderOpacity);
-  for (const { x, y } of positions) {
-    const cx = x + (grid.sizeX / 2);
-    const cy = y + (grid.sizeY / 2);
-    const points = grid.getShape();
-    for (const point of points) { point.x += cx; point.y += cy; }
+  if (drawLine) _drawCellsBorder(template, cellShapes, config, lineColor, lineAlpha, template.id, unionCellShapes);
+  else _destroyBorderGfx(template);
+}
+
+function _drawCellsBorder(template, cellShapes, config, lineColor, lineAlpha, templateId, unionCellShapes = null) {
+  const gfx = _getBorderGfx(template);
+  if (!gfx) return;
+  gfx.clear();
+  const ox = template.document.x ?? 0;
+  const oy = template.document.y ?? 0;
+  const isDashed = config.lineType === LINE_TYPES.DASHED;
+  const edgeCount = new Map();
+  const tally = (points) => {
+    for (let i = 0; i < points.length; i++) {
+      const p1 = points[i], p2 = points[(i + 1) % points.length];
+      const x1 = Math.round(p1.x * 10) / 10, y1 = Math.round(p1.y * 10) / 10;
+      const x2 = Math.round(p2.x * 10) / 10, y2 = Math.round(p2.y * 10) / 10;
+      const key = `${Math.min(x1, x2)},${Math.min(y1, y2)}-${Math.max(x1, x2)},${Math.max(y1, y2)}`;
+      edgeCount.set(key, (edgeCount.get(key) || 0) + 1);
+    }
+  };
+  // when merged into a group, tally the deduped group union; otherwise tally this template's own cells
+  if (unionCellShapes) for (const { points } of unionCellShapes) tally(points);
+  else for (const { points } of cellShapes) tally(points);
+  gfx.lineStyle(config.lineWidth, lineColor, lineAlpha);
+  const dashOffset = getDashOffset(templateId);
+  for (const { points } of cellShapes) {
+    for (let i = 0; i < points.length; i++) {
+      const p1 = points[i], p2 = points[(i + 1) % points.length];
+      const x1 = Math.round(p1.x * 10) / 10, y1 = Math.round(p1.y * 10) / 10;
+      const x2 = Math.round(p2.x * 10) / 10, y2 = Math.round(p2.y * 10) / 10;
+      const key = `${Math.min(x1, x2)},${Math.min(y1, y2)}-${Math.max(x1, x2)},${Math.max(y1, y2)}`;
+      if (edgeCount.get(key) !== 1) continue;
+      const lp1 = { x: p1.x - ox, y: p1.y - oy };
+      const lp2 = { x: p2.x - ox, y: p2.y - oy };
+      if (isDashed) {
+        drawDashedPolygon(gfx, [lp1, lp2], { dashSize: config.lineDashSize, gapSize: config.lineGapSize, offset: dashOffset, closed: false });
+      } else {
+        gfx.moveTo(lp1.x, lp1.y);
+        gfx.lineTo(lp2.x, lp2.y);
+      }
+    }
   }
 }
 
-// Cache for hex geometry (shapes + edge map). Rebuilt only when template moves/resizes.
+function _drawDashedShapeOutline(template, shape, config, lineColor, lineAlpha, templateId) {
+  const gfx = _getBorderGfx(template);
+  if (!gfx) return;
+  gfx.clear();
+  gfx.lineStyle(config.lineWidth, lineColor, lineAlpha);
+  const dashOffset = getDashOffset(templateId);
+  let points = [];
+  if (shape instanceof PIXI.Polygon) {
+    for (let i = 0; i < shape.points.length; i += 2) points.push({ x: shape.points[i], y: shape.points[i + 1] });
+  } else if (shape instanceof PIXI.Circle) {
+    const segs = 64;
+    for (let i = 0; i < segs; i++) {
+      const t = (i / segs) * Math.PI * 2;
+      points.push({ x: shape.x + Math.cos(t) * shape.radius, y: shape.y + Math.sin(t) * shape.radius });
+    }
+  } else if (shape instanceof PIXI.Rectangle) {
+    points = [
+      { x: shape.x, y: shape.y },
+      { x: shape.x + shape.width, y: shape.y },
+      { x: shape.x + shape.width, y: shape.y + shape.height },
+      { x: shape.x, y: shape.y + shape.height }
+    ];
+  }
+  if (points.length) {
+    drawDashedPolygon(gfx, points, { dashSize: config.lineDashSize, gapSize: config.lineGapSize, offset: dashOffset, closed: true });
+  }
+}
+
 const _geometryCache = new Map();
 
 function _buildGeometry(template) {
@@ -277,9 +540,29 @@ function highlightGridWithPattern(template) {
   if (!highlightLayer) return;
 
   highlightLayer.clear();
+  highlightLayer.alpha = 1;
+  // keep our fill above the grid wireframe
+  const parent = highlightLayer.parent;
+  if (parent && parent.children[parent.children.length - 1] !== highlightLayer) {
+    parent.removeChild(highlightLayer);
+    parent.addChild(highlightLayer);
+  }
   const config = getPatternFillConfig(doc);
-  const texture = getCachedTexture(config.fillTexture);
+  const needsAnim = config.fillAnimation || config.fillPulse
+    || !!config.lineColorAnimation || !!config.fillColorAnimation
+    || !!config.fillTextureOffsetAnimation || config.lineDashOffsetAnimation !== 0;
+  if (needsAnim) startAnimation(template); else stopAnimation(template);
 
+  const { lineColorHex, lineAlpha, fillColorHex, fillAlpha } = sampleEffectiveColors(config);
+  const lineColor = Color.from(lineColorHex);
+  const drawLine = config.lineType !== LINE_TYPES.NONE;
+
+  if (config.fillType !== FILL_TYPES.PATTERN) {
+    drawSolidFallback(template, config);
+    return;
+  }
+
+  const texture = getCachedTexture(config.fillTexture);
   if (!texture) {
     drawSolidFallback(template, config);
     loadTexture(config.fillTexture).then(tex => {
@@ -293,243 +576,136 @@ function highlightGridWithPattern(template) {
     return;
   }
 
-  const fillColor = Color.from(config.fillColor);
+  const fillColor = Color.from(fillColorHex);
   const { x: scaleX, y: scaleY } = config.fillTextureScale;
-
   const animOffset = getAnimationOffset(template.id);
   const finalOffsetX = (config.fillTextureOffset?.x ?? 0) + animOffset.x;
   const finalOffsetY = (config.fillTextureOffset?.y ?? 0) + animOffset.y;
-
-  if (config.fillAnimation || config.fillPulse) {
-    startAnimation(template);
-  } else {
-    stopAnimation(template);
-  }
-
-  const borderColor = Color.from(doc.borderColor ?? "#000000");
-  const fillOpacity = config.fillPulse ? getPulsedFillOpacity(template.id, config.fillOpacity) : config.fillOpacity;
+  const fillOpacity = config.fillPulse ? getPulsedFillOpacity(template.id, fillAlpha) : fillAlpha;
   const fillMatrix = new PIXI.Matrix(scaleX / 100, 0, 0, scaleY / 100, finalOffsetX, finalOffsetY);
 
-  // Gridless: draw directly on the template shape instead of per-cell.
   if (canvas.grid.type === CONST.GRID_TYPES.GRIDLESS) {
     const shape = template._getGridHighlightShape?.() ?? template.shape;
     if (!shape) return;
     highlightLayer.beginTextureFill({ texture, color: fillColor, alpha: fillOpacity, matrix: fillMatrix });
-    highlightLayer.lineStyle(2, borderColor, config.borderOpacity);
+    highlightLayer.lineStyle(0);
     highlightLayer.drawShape(shape);
     highlightLayer.endFill();
+    if (drawLine) {
+      const gfx = _getBorderGfx(template);
+      if (gfx) {
+        gfx.clear();
+        if (config.lineType === LINE_TYPES.SOLID) {
+          gfx.lineStyle(config.lineWidth, lineColor, lineAlpha);
+          gfx.drawShape(shape);
+        } else if (config.lineType === LINE_TYPES.DASHED) {
+          _drawDashedShapeOutline(template, shape, config, lineColor, lineAlpha, template.id);
+        }
+      }
+    } else {
+      _destroyBorderGfx(template);
+    }
     return;
   }
 
-  // Grid: draw per-cell with cached geometry.
-  const { hexShapes, edgeCount } = _getCachedGeometry(template);
+  const { hexShapes } = _getCachedGeometry(template);
+  const keep = _cellFilterFor(template.document);
+  const { skipKeys, unionCellShapes } = _groupOwnership(template);
+  const cellShapes = hexShapes
+    .filter(({ points }) => {
+      let sx = 0, sy = 0;
+      for (const p of points) { sx += p.x; sy += p.y; }
+      const cx = sx / points.length, cy = sy / points.length;
+      if (keep && !keep(cx, cy)) return false;
+      if (skipKeys?.has(_cellKey(cx, cy))) return false;
+      return true;
+    })
+    .map(({ shape, points }) => ({ shape, points }));
 
-  for (const { shape } of hexShapes) {
+  for (const { shape } of cellShapes) {
     highlightLayer.beginTextureFill({ texture, color: fillColor, alpha: fillOpacity, matrix: fillMatrix });
     highlightLayer.drawShape(shape);
     highlightLayer.endFill();
   }
 
-  highlightLayer.lineStyle(2, borderColor, config.borderOpacity);
-  for (const { points } of hexShapes) {
-    for (let i = 0; i < points.length; i++) {
-      const p1 = points[i];
-      const p2 = points[(i + 1) % points.length];
-      const x1 = Math.round(p1.x * 10) / 10;
-      const y1 = Math.round(p1.y * 10) / 10;
-      const x2 = Math.round(p2.x * 10) / 10;
-      const y2 = Math.round(p2.y * 10) / 10;
-      const edgeKey = `${Math.min(x1, x2)},${Math.min(y1, y2)}-${Math.max(x1, x2)},${Math.max(y1, y2)}`;
-
-      if (edgeCount.get(edgeKey) === 1) {
-        highlightLayer.moveTo(p1.x, p1.y);
-        highlightLayer.lineTo(p2.x, p2.y);
-      }
-    }
-  }
+  if (drawLine) _drawCellsBorder(template, cellShapes, config, lineColor, lineAlpha, template.id, unionCellShapes);
+  else _destroyBorderGfx(template);
 }
 
 function wrapHighlightGrid(wrapped, ...args) {
-  if (shouldUsePatternFill(this.document)) {
+  if (shouldUseCustomRender(this.document)) {
     highlightGridWithPattern(this);
     return;
   }
+  _destroyBorderGfx(this);
   return wrapped.call(this, ...args);
 }
 
-function onRenderMeasuredTemplateConfig(app, html, data) {
-  const doc = app.document;
-  const currentFillType = doc.getFlag(MODULE, "fillType") ?? FILL_TYPES.SOLID;
-  const currentFillTexture = doc.getFlag(MODULE, "fillTexture") || DEFAULT_PATTERN_TEXTURE;
-  const currentFillSize = doc.getFlag(MODULE, "fillSize") ?? 0.5;
-  const currentFillOpacity = doc.getFlag(MODULE, "fillOpacity") ?? 0.25;
-  const currentBorderOpacity = doc.getFlag(MODULE, "borderOpacity") ?? 0.5;
-  const currentFillPulse = doc.getFlag(MODULE, "fillPulse") ?? false;
-  const currentFillPulseSpeed = doc.getFlag(MODULE, "fillPulseSpeed") ?? 1;
-  const isPattern = currentFillType == FILL_TYPES.PATTERN;
+const DEFAULT_CUSTOM_CONTROL_ICON = "modules/templatemacro/assets/holosphere.svg";
 
-  const fillTypeHtml = `
-    <div class="form-group">
-      <label>Fill Type</label>
-      <select name="flags.templatemacro.fillType" data-dtype="Number" id="templatemacro-fillType">
-        <option value="${FILL_TYPES.SOLID}" ${currentFillType == FILL_TYPES.SOLID ? "selected" : ""}>Solid</option>
-        <option value="${FILL_TYPES.PATTERN}" ${currentFillType == FILL_TYPES.PATTERN ? "selected" : ""}>Pattern</option>
-      </select>
-    </div>`;
+function _suppressNativeShape(template) {
+  if (!template?.template) return;
+  const useCustom = !!template.document?.getFlag(MODULE, "useCustomRender");
+  template.template.alpha = useCustom ? 0 : 1;
+}
 
-  const patternOptionsHtml = `
-    <div class="form-group pattern-options" style="${isPattern ? '' : 'display:none;'}">
-      <label>Pattern Texture</label>
-      <div class="form-fields">
-        <input type="text" name="flags.templatemacro.fillTexture" value="${currentFillTexture}" placeholder="path/to/texture.png">
-        <button type="button" class="file-picker" data-type="imagevideo" data-target="flags.templatemacro.fillTexture" title="Browse Files"><i class="fas fa-file-import"></i></button>
-      </div>
-    </div>
-    <div class="form-group pattern-options" style="${isPattern ? '' : 'display:none;'}">
-      <label>Pattern Size</label>
-      <div class="form-fields">
-        <input type="range" name="flags.templatemacro.fillSize" value="${currentFillSize}" min="0.1" max="3" step="0.1"><span class="range-value">${currentFillSize}</span>
-      </div>
-    </div>
-    <div class="form-group pattern-options" style="${isPattern ? '' : 'display:none;'}">
-      <label>Fill Opacity</label>
-      <div class="form-fields">
-        <input type="range" name="flags.templatemacro.fillOpacity" value="${currentFillOpacity}" min="0" max="1" step="0.05"><span class="range-value">${currentFillOpacity}</span>
-      </div>
-    </div>
-    <div class="form-group pattern-options" style="${isPattern ? '' : 'display:none;'}">
-      <label>Border Opacity</label>
-      <div class="form-fields">
-        <input type="range" name="flags.templatemacro.borderOpacity" value="${currentBorderOpacity}" min="0" max="1" step="0.05"><span class="range-value">${currentBorderOpacity}</span>
-      </div>
-    </div>
-    <div class="form-group pattern-options" style="${isPattern ? '' : 'display:none;'}">
-      <label>Fill Animation</label>
-      <input type="checkbox" name="flags.templatemacro.fillAnimation" ${doc.getFlag(MODULE, "fillAnimation") ? 'checked' : ''}>
-    </div>
-    <div class="form-group pattern-options" style="${isPattern ? '' : 'display:none;'}">
-      <label>Animation Speed</label>
-      <div class="form-fields">
-        <input type="range" name="flags.templatemacro.fillAnimationSpeed" value="${doc.getFlag(MODULE, "fillAnimationSpeed") ?? 0.5}" min="0.1" max="3" step="0.1"><span class="range-value">${doc.getFlag(MODULE, "fillAnimationSpeed") ?? 0.5}</span>
-      </div>
-    </div>
-    <div class="form-group pattern-options" style="${isPattern ? '' : 'display:none;'}">
-      <label>Animation Angle</label>
-      <div class="form-fields">
-        <input type="range" name="flags.templatemacro.fillAnimationAngle" value="${doc.getFlag(MODULE, "fillAnimationAngle") ?? 0}" min="0" max="360" step="15"><span class="range-value">${doc.getFlag(MODULE, "fillAnimationAngle") ?? 0}°</span>
-      </div>
-    </div>
-    <div class="form-group pattern-options" style="${isPattern ? '' : 'display:none;'}">
-      <label>Fill Pulse</label>
-      <input type="checkbox" name="flags.templatemacro.fillPulse" ${currentFillPulse ? 'checked' : ''}>
-    </div>
-    <div class="form-group pattern-options" style="${isPattern ? '' : 'display:none;'}">
-      <label>Pulse Speed</label>
-      <div class="form-fields">
-        <input type="range" name="flags.templatemacro.fillPulseSpeed" value="${currentFillPulseSpeed}" min="0.1" max="3" step="0.1"><span class="range-value">${currentFillPulseSpeed}</span>
-      </div>
-    </div>`;
+function _getBorderGfx(template) {
+  if (!template) return null;
+  if (template._tmacBorder && !template._tmacBorder.destroyed) return template._tmacBorder;
+  const gfx = new PIXI.Graphics();
+  template._tmacBorder = gfx;
+  template.addChild(gfx);
+  return gfx;
+}
 
-  const currentCenterLabel = doc.getFlag(MODULE, "centerLabel") ?? "";
-  const centerLabelHtml = `
-    <div class="form-group">
-      <label>Center Label</label>
-      <input type="text" name="flags.templatemacro.centerLabel" value="${currentCenterLabel}" placeholder="Text shown in template center…">
-    </div>`;
+function _destroyBorderGfx(template) {
+  const gfx = template?._tmacBorder;
+  if (!gfx) return;
+  gfx.parent?.removeChild(gfx);
+  if (!gfx.destroyed) gfx.destroy();
+  template._tmacBorder = null;
+}
 
-  // "Attach to Token" selector
-  const currentAttachId = doc.getFlag(MODULE, "attachedTokenId") ?? "";
-  const sceneTokens = doc.parent?.tokens?.contents ?? [];
-  const tokenOptions = sceneTokens.map(t =>
-    `<option value="${t.id}" ${t.id === currentAttachId ? "selected" : ""}>${t.name}</option>`
-  ).join("");
-  const attachHtml = `
-    <div class="form-group">
-      <label>Attached To</label>
-      <select name="flags.templatemacro.attachedTokenId">
-        <option value="">None</option>
-        ${tokenOptions}
-      </select>
-    </div>`;
-
-  const hiddenField = html.find('[name="hidden"]').closest(".form-group");
-  hiddenField.after(attachHtml);
-
-  const fillColorField = html.find('[name="fillColor"]').closest(".form-group");
-  if (fillColorField.length) {
-    fillColorField.before(centerLabelHtml);
-    fillColorField.after(fillTypeHtml + patternOptionsHtml);
-  } else {
-    hiddenField.before(centerLabelHtml + fillTypeHtml + patternOptionsHtml);
+async function _applyCustomControlIcon(template) {
+  if (!template?.controlIcon) return;
+  if (!template.document.getFlag(MODULE, "useCustomRender")) return;
+  const entryIcon = template.document.getFlag(MODULE, "libraryEntryIcon") || "";
+  // FA classes can't drive a PIXI sprite, fall back when the entry icon is one
+  const path = (entryIcon && !entryIcon.startsWith("fa-")) ? entryIcon : DEFAULT_CUSTOM_CONTROL_ICON;
+  const tex = textureCache.get(path) ?? await loadTexture(path);
+  if (tex) textureCache.set(path, tex);
+  const iconSprite = template.controlIcon?.icon ?? template.controlIcon?.children?.find?.(c => c instanceof PIXI.Sprite);
+  if (tex && iconSprite && !iconSprite.destroyed) {
+    iconSprite.texture = tex;
   }
-
-  const togglePatternMode = (isPattern) => {
-    html.find('.pattern-options').toggle(isPattern);
-    ['texture', 'textureAlpha', 'specialEffect', 'effectTint'].forEach(f => {
-      html.find(`[name="${f}"]`).closest('.form-group').toggle(!isPattern);
-    });
-    
-    html.find('.form-group').each(function() {
-      const label = $(this).find('label').text().trim().toLowerCase().replace(':', '');
-      if (label.includes('special effect') || label.includes('effect tint') || label.includes('fill texture')) {
-        $(this).toggle(!isPattern);
-      }
-    });
-    app.setPosition({ height: "auto" });
-  };
-
-  togglePatternMode(isPattern);
-  setTimeout(() => togglePatternMode(isPattern), 100);
-
-  html.find('#templatemacro-fillType').on('change', function() {
-    togglePatternMode(this.value == FILL_TYPES.PATTERN);
-  });
-
-  html.find('input[type="range"]').on('input', function() {
-    $(this).siblings('.range-value').text(this.value);
-  });
-
-  // Convert empty attachedTokenId to null so the flag gets unset
-  const origUpdateObject = app._updateObject.bind(app);
-  app._updateObject = async function(event, formData) {
-    if (formData["flags.templatemacro.attachedTokenId"] === "") {
-      formData["flags.templatemacro.attachedTokenId"] = null;
-    }
-    return origUpdateObject(event, formData);
-  };
-
-  html.find('.file-picker').on('click', async function(event) {
-    event.preventDefault();
-    const target = this.dataset.target;
-    new FilePicker({
-      type: "imagevideo",
-      current: html.find(`[name="${target}"]`).val(),
-      callback: path => html.find(`[name="${target}"]`).val(path)
-    }).browse();
-  });
-  
-  app.setPosition({ height: "auto" });
 }
 
 export function registerPatternFillHooks() {
   preloadTextures();
-  Hooks.on("renderMeasuredTemplateConfig", onRenderMeasuredTemplateConfig);
-  
+
   if (game.modules.get("lib-wrapper")?.active) {
     libWrapper.register(MODULE, "MeasuredTemplate.prototype.highlightGrid", wrapHighlightGrid, "MIXED");
   } else {
     const originalHighlightGrid = MeasuredTemplate.prototype.highlightGrid;
     MeasuredTemplate.prototype.highlightGrid = function(...args) {
-      return shouldUsePatternFill(this.document) ? highlightGridWithPattern(this) : originalHighlightGrid.call(this, ...args);
+      return shouldUseCustomRender(this.document) ? highlightGridWithPattern(this) : originalHighlightGrid.call(this, ...args);
     };
   }
 
   Hooks.on("updateMeasuredTemplate", (doc, changes) => {
-    if (changes.flags?.templatemacro) {
+    if (changes.flags?.templatemacro || "x" in changes || "y" in changes || "distance" in changes
+        || "direction" in changes || "angle" in changes || "width" in changes) {
       const template = doc.object;
-      if (template) setTimeout(() => template.refresh(), 50);
+      if (!template) return;
+      const useCustomChanged = "useCustomRender" in (changes.flags?.templatemacro ?? {});
+      setTimeout(() => {
+        useCustomChanged ? template.draw() : template.refresh();
+        _refreshMergeSiblings(doc);
+      }, 50);
     }
   });
+
+  Hooks.on("createMeasuredTemplate", (doc) => setTimeout(() => _refreshMergeSiblings(doc), 80));
 
   Hooks.on("deleteMeasuredTemplate", (doc) => {
     _geometryCache.delete(doc.id);
@@ -544,13 +720,18 @@ export function registerPatternFillHooks() {
       if (!text.destroyed) text.destroy();
       centerLabelObjects.delete(doc.id);
     }
+    if (doc.object) _destroyBorderGfx(doc.object);
+    setTimeout(() => _refreshMergeSiblings(doc), 50);
   });
 
   Hooks.on("drawMeasuredTemplate", (template) => {
     _refreshCenterLabel(template);
+    _applyCustomControlIcon(template);
+    _suppressNativeShape(template);
   });
 
   Hooks.on("refreshMeasuredTemplate", (template) => {
+    _suppressNativeShape(template);
     _refreshCenterLabel(template);
   });
 
