@@ -800,11 +800,15 @@ function _promptDangerous(entry) {
 function _promptStatus(entry) {
   return new Promise(resolve => {
     const statusEffects = CONFIG.statusEffects || [];
-    const opts = statusEffects.map(s => {
+    const rows = statusEffects.map(s => {
       let label = s.name || s.label || s.id;
       if (typeof label === "string" && label.startsWith("lancer.")) label = label.split(".").pop();
-      const sel = (entry.statusEffects ?? []).includes(s.id) ? "selected" : "";
-      return `<option value="${s.id}" ${sel}>${label.charAt(0).toUpperCase() + label.slice(1)}</option>`;
+      label = label.charAt(0).toUpperCase() + label.slice(1);
+      return { id: s.id, label };
+    }).sort((a, b) => a.label.localeCompare(b.label));
+    const opts = rows.map(r => {
+      const sel = (entry.statusEffects ?? []).includes(r.id) ? "selected" : "";
+      return `<option value="${r.id}" ${sel}>${r.label}</option>`;
     }).join("");
     new Dialog({
       title: `Activate: ${entry.name}`,
