@@ -89,6 +89,7 @@ function makeEntry(overrides = {}) {
     id: foundry.utils.randomID(),
     name: overrides.name ?? "New Template",
     icon: overrides.icon ?? (protectedKind ? PROTECTED_KINDS[protectedKind].icon : "fa-circle"),
+    folder: overrides.folder ?? "",
     protected: !!overrides.protected,
     protectedKind,
     graphicsState: overrides.graphicsState ?? (protectedKind ? _readDefaultGraphicsForZone(protectedKind) : _defaultGraphics())
@@ -120,6 +121,7 @@ function makeSpawnEntry(overrides = {}) {
     id: foundry.utils.randomID(),
     name: overrides.name ?? "New Template",
     icon: overrides.icon ?? "fa-circle",
+    folder: overrides.folder ?? "",
     size: overrides.size ?? 1,
     templateType: overrides.templateType ?? "Blast",
     graphicsState: overrides.graphicsState ?? _defaultGraphics()
@@ -284,6 +286,34 @@ export function registerLibraryHooks() {
     if (!entry) return;
     applyEntryToTemplateData(doc, entry);
   });
+
+  // drop a library card onto the canvas to spawn / activate
+  Hooks.on("dropCanvasData", async (_canvas, data) => {
+    if (data?.type !== "templatemacro-entry") return;
+    const entry = (data.kind === "preset" ? getLibrary() : getSpawnLibrary()).find(e => e.id === data.id);
+    if (!entry) return false;
+    if (data.kind === "spawn") {
+      // spawn at drop position using the entry's size + templateType
+      setActiveEntryId(entry.id, null);
+      try {
+        const tMap = { blast: "circle", burst: "circle", cone: "cone", line: "ray" };
+        const t = tMap[(entry.templateType ?? "Blast").toLowerCase()] ?? "circle";
+        await getDocumentClass("MeasuredTemplate").create({
+          t, user: game.user.id,
+          x: data.x, y: data.y,
+          distance: entry.size ?? 1
+        }, { parent: canvas.scene });
+      } finally {
+        setActiveEntryId(null);
+      }
+    } else {
+      // preset: activate and let the user draw with the standard tool
+      const overrides = await _promptForKind(entry);
+      if (overrides === null && _kindNeedsPrompt(entry.protectedKind)) return false;
+      setActiveEntryId(entry.id, overrides ?? {});
+    }
+    return false;
+  });
 }
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -305,11 +335,53 @@ export class TemplateLibraryConfig extends HandlebarsApplicationMixin(Applicatio
     super(options);
     this._activeHookId = Hooks.on("templatemacro.activeLibraryEntryChanged", () => this.render());
     this._activeTab = "presets";
+    this._collapsedFolders = new Set();
   }
 
   async _preClose() {
     if (this._activeHookId) Hooks.off("templatemacro.activeLibraryEntryChanged", this._activeHookId);
     if (getActiveEntryId()) setActiveEntryId(null);
+  }
+
+  _openFolderMenu(folder, isPreset) {
+    const settingKey = isPreset ? "templateLibraryFolders" : "templateLibrarySpawnFolders";
+    const libGet = isPreset ? getLibrary : getSpawnLibrary;
+    const libSet = isPreset ? setLibrary : setSpawnLibrary;
+    new Dialog({
+      title: `Folder: ${folder}`,
+      content: `<form><div class="form-group"><label>Rename to</label><input type="text" name="folder" value="${String(folder).replaceAll('"', '&quot;')}" autofocus></div></form>`,
+      buttons: {
+        rename: {
+          icon: '<i class="fa-solid fa-pen"></i>',
+          label: "Rename",
+          callback: async (html) => {
+            const newName = String(html.find('input[name="folder"]').val() ?? "").trim();
+            if (!newName || newName === folder) return;
+            const list = (game.settings.get(MODULE, settingKey) ?? []).filter(f => f !== folder);
+            if (!list.includes(newName)) list.push(newName);
+            await game.settings.set(MODULE, settingKey, list);
+            const lib = libGet();
+            for (const e of lib) if (e.folder === folder) e.folder = newName;
+            await libSet(lib);
+            this.render();
+          }
+        },
+        remove: {
+          icon: '<i class="fa-solid fa-trash"></i>',
+          label: "Remove",
+          callback: async () => {
+            const list = (game.settings.get(MODULE, settingKey) ?? []).filter(f => f !== folder);
+            await game.settings.set(MODULE, settingKey, list);
+            const lib = libGet();
+            for (const e of lib) if (e.folder === folder) e.folder = "";
+            await libSet(lib);
+            this.render();
+          }
+        },
+        cancel: { icon: '<i class="fa-solid fa-xmark"></i>', label: "Cancel" }
+      },
+      default: "rename"
+    }).render(true);
   }
 
   _onClose() {
@@ -342,12 +414,30 @@ export class TemplateLibraryConfig extends HandlebarsApplicationMixin(Applicatio
         protected: !!e.protected
       };
     };
+    const groupByFolder = (entries, knownFolders) => {
+      const groups = new Map();
+      groups.set("", []);
+      for (const f of knownFolders) if (f) groups.set(f, []);
+      for (const e of entries) {
+        const key = (e.folder ?? "").trim();
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(e);
+      }
+      const orderedKeys = [...groups.keys()].sort((a, b) => {
+        if (!a) return -1;
+        if (!b) return 1;
+        return a.localeCompare(b);
+      });
+      return orderedKeys.map(name => ({ name, entries: groups.get(name) }));
+    };
+    const presetFolders = game.settings.get(MODULE, "templateLibraryFolders") ?? [];
+    const spawnFolders = game.settings.get(MODULE, "templateLibrarySpawnFolders") ?? [];
     return {
       tab: this._activeTab ?? "presets",
       isPresetsTab: (this._activeTab ?? "presets") === "presets",
       isSpawnTab: (this._activeTab ?? "presets") === "spawn",
-      presets: getLibrary().map(decorateEntry),
-      spawns: getSpawnLibrary().map(decorateEntry),
+      presetGroups: groupByFolder(getLibrary().map(decorateEntry), presetFolders),
+      spawnGroups: groupByFolder(getSpawnLibrary().map(decorateEntry), spawnFolders),
       isGM: game.user.isGM,
       hasActive: !!active
     };
@@ -356,6 +446,71 @@ export class TemplateLibraryConfig extends HandlebarsApplicationMixin(Applicatio
   _onRender(_context, _options) {
     const root = this.element;
     const on = (sel, evt, fn) => root.querySelectorAll(sel).forEach(el => el.addEventListener(evt, fn));
+
+    // drag a card: stash {kind, id} on the dragstart so the canvas / folder-header drop knows what landed
+    on("[data-tmac-entry-id]", "dragstart", (ev) => {
+      const kind = ev.currentTarget.dataset.tmacEntryKind;
+      const id = ev.currentTarget.dataset.tmacEntryId;
+      ev.dataTransfer.setData("text/plain", JSON.stringify({ type: "templatemacro-entry", kind, id }));
+      ev.dataTransfer.effectAllowed = "move";
+    });
+
+    // collapse / expand on click (skip the "no folder" root header)
+    on("[data-tmac-folder-drop]", "click", (ev) => {
+      const folder = ev.currentTarget.dataset.tmacFolderDrop ?? "";
+      if (!folder) return;
+      const tab = this._activeTab ?? "presets";
+      const key = `${tab}|${folder}`;
+      if (this._collapsedFolders.has(key)) this._collapsedFolders.delete(key);
+      else this._collapsedFolders.add(key);
+      const list = ev.currentTarget.nextElementSibling;
+      if (list?.classList?.contains("tmac-lib-list")) list.classList.toggle("collapsed");
+      ev.currentTarget.classList.toggle("collapsed");
+    });
+
+    // right-click: rename or delete the folder
+    on("[data-tmac-folder-drop]", "contextmenu", (ev) => {
+      ev.preventDefault();
+      const folder = ev.currentTarget.dataset.tmacFolderDrop ?? "";
+      if (!folder) return;
+      const isPreset = (this._activeTab ?? "presets") === "presets";
+      this._openFolderMenu(folder, isPreset);
+    });
+
+    // apply persisted collapse state from prior renders
+    {
+      const tab = this._activeTab ?? "presets";
+      for (const header of root.querySelectorAll("[data-tmac-folder-drop]")) {
+        const folder = header.dataset.tmacFolderDrop ?? "";
+        if (!folder) continue;
+        if (this._collapsedFolders.has(`${tab}|${folder}`)) {
+          header.classList.add("collapsed");
+          const list = header.nextElementSibling;
+          if (list?.classList?.contains("tmac-lib-list")) list.classList.add("collapsed");
+        }
+      }
+    }
+
+    // drop on a folder header: move the dragged entry into that folder
+    on("[data-tmac-folder-drop]", "dragover", (ev) => { ev.preventDefault(); ev.dataTransfer.dropEffect = "move"; });
+    on("[data-tmac-folder-drop]", "dragenter", (ev) => ev.currentTarget.classList.add("tmac-drag-over"));
+    on("[data-tmac-folder-drop]", "dragleave", (ev) => ev.currentTarget.classList.remove("tmac-drag-over"));
+    on("[data-tmac-folder-drop]", "drop", async (ev) => {
+      ev.currentTarget.classList.remove("tmac-drag-over");
+      ev.preventDefault();
+      let payload;
+      try { payload = JSON.parse(ev.dataTransfer.getData("text/plain")); }
+      catch { return; }
+      if (payload?.type !== "templatemacro-entry") return;
+      const folder = ev.currentTarget.dataset.tmacFolderDrop ?? "";
+      const isPreset = payload.kind === "preset";
+      const lib = isPreset ? getLibrary() : getSpawnLibrary();
+      const idx = lib.findIndex(e => e.id === payload.id);
+      if (idx < 0) return;
+      lib[idx] = { ...lib[idx], folder };
+      await (isPreset ? setLibrary : setSpawnLibrary)(lib);
+      this.render();
+    });
 
     on("[data-tmac-lib-select]", "click", async (ev) => {
       if (ev.target.closest("[data-tmac-lib-edit], [data-tmac-lib-clone], [data-tmac-lib-delete]")) return;
@@ -470,6 +625,7 @@ export class TemplateLibraryConfig extends HandlebarsApplicationMixin(Applicatio
 
     on("[data-tmac-lib-export]", "click",() => _exportLibrary());
     on("[data-tmac-lib-import]", "click",() => _importLibrary(this));
+    on("[data-tmac-lib-new-folder]", "click", () => _promptNewFolder("templateLibraryFolders", this));
     on("[data-tmac-lib-entry-export]", "click",(ev) => {
       ev.stopPropagation();
       const id = ev.currentTarget.dataset.tmacLibEntryExport;
@@ -560,6 +716,7 @@ export class TemplateLibraryConfig extends HandlebarsApplicationMixin(Applicatio
 
     on("[data-tmac-spawn-export]", "click",() => _downloadJson("templatemacro-spawn-library.json", getSpawnLibrary()));
     on("[data-tmac-spawn-import]", "click",() => _importSpawnLibrary(this));
+    on("[data-tmac-spawn-new-folder]", "click", () => _promptNewFolder("templateLibrarySpawnFolders", this));
     on("[data-tmac-spawn-entry-export]", "click",(ev) => {
       ev.stopPropagation();
       const id = ev.currentTarget.dataset.tmacSpawnEntryExport;
@@ -609,6 +766,29 @@ function _showJsonExportDialog(title, data) {
     default: "close",
     render: (html) => html.find("textarea").focus().select()
   }, { width: 600, height: 420, resizable: true }).render(true);
+}
+
+function _promptNewFolder(settingKey, parent) {
+  new Dialog({
+    title: "New Folder",
+    content: `<form><div class="form-group"><label>Name</label><input type="text" name="folder" autofocus></div></form>`,
+    buttons: {
+      create: {
+        icon: '<i class="fa-solid fa-folder-plus"></i>',
+        label: "Create",
+        callback: async (html) => {
+          const name = String(html.find('input[name="folder"]').val() ?? "").trim();
+          if (!name) return;
+          const list = game.settings.get(MODULE, settingKey) ?? [];
+          if (!list.includes(name)) list.push(name);
+          await game.settings.set(MODULE, settingKey, list);
+          parent?.render();
+        }
+      },
+      cancel: { icon: '<i class="fa-solid fa-xmark"></i>', label: "Cancel" }
+    },
+    default: "create"
+  }).render(true);
 }
 
 function _showJsonImportDialog(title, onImport) {

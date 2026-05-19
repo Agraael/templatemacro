@@ -28,6 +28,7 @@ import {
 import { callMacro, registerCallback, unregisterCallbacks } from "./scripts/templatemacro.mjs";
 import { registerPatternFillHooks, FILL_TYPES } from "./scripts/patternFill.mjs";
 import { registerDragElevation } from "./scripts/drag-elevation.mjs";
+import { checkModuleUpdate } from "./scripts/version-check.mjs";
 
 class ZoneConfig extends FormApplication {
   static get defaultOptions() {
@@ -171,7 +172,10 @@ Hooks.once("setup", () => {
       new TemplateLibraryConfig().render(true);
     }
   });
-  Hooks.once("ready", () => seedLibraryIfEmpty());
+  Hooks.once("ready", () => {
+    seedLibraryIfEmpty();
+    checkModuleUpdate(MODULE);
+  });
 
   registerPatternFillHooks();
 });
@@ -451,6 +455,13 @@ function _registerLancerSettings() {
     default: false
   });
 
+  game.settings.register(MODULE, "lastNotifiedVersion", {
+    scope: "world",
+    config: false,
+    type: String,
+    default: ""
+  });
+
   _registerGraphicDefaults("danger");
   _registerGraphicDefaults("status");
   _registerGraphicDefaults("difficult");
@@ -463,6 +474,20 @@ function _registerLancerSettings() {
   });
 
   game.settings.register(MODULE, "templateLibrarySpawn", {
+    scope: "world",
+    config: false,
+    type: Array,
+    default: []
+  });
+
+  game.settings.register(MODULE, "templateLibraryFolders", {
+    scope: "world",
+    config: false,
+    type: Array,
+    default: []
+  });
+
+  game.settings.register(MODULE, "templateLibrarySpawnFolders", {
     scope: "world",
     config: false,
     type: Array,
