@@ -333,18 +333,18 @@
         </fieldset>
         {{#if hasMovementRuler}}
         <fieldset>
-          <legend><i class="fa-solid fa-shoe-prints"></i> Movement Penalty</legend>
+          <legend><i class="fa-solid fa-shoe-prints"></i> Movement Penalty (Lancer Automations)</legend>
           <div class="form-group">
             <label>Penalty</label>
             <div class="form-fields">
-              <input type="number" name="movementPenalty" value="{{state.movementPenalty}}" step="any" class="tmac-num-wide">
+              <input type="number" name="movementPenalty" value="{{state.movementPenalty}}" step="any" class="tmac-num-wide" {{#unless hasLancerAutomations}}disabled{{/unless}}>
               <span class="tmac-unit">gu/hex or multiplier</span>
             </div>
           </div>
           <div class="form-group">
             <label>Flat</label>
-            <input type="checkbox" name="flatMovementPenalty" {{#if state.flatMovementPenalty}}checked{{/if}}>
-            <p class="hint">On: flat gu per hex. Off: multiplier on cost.</p>
+            <input type="checkbox" name="flatMovementPenalty" {{#if state.flatMovementPenalty}}checked{{/if}} {{#unless hasLancerAutomations}}disabled{{/unless}}>
+            <p class="hint">On: flat gu per hex. Off: multiplier on cost. Requires the Lancer Automations module.</p>
           </div>
         </fieldset>
         {{/if}}
