@@ -28,7 +28,7 @@
       <a data-tmac-tab="geometry" class="{{#unless state.useCustomRender}}tmac-tab-inactive{{/unless}}" title="{{#unless state.useCustomRender}}Only applied when Advanced Mode is enabled{{/unless}}"><i class="fa-solid fa-ruler-combined"></i><span>Geometry</span></a>
       <a data-tmac-tab="border" class="{{#unless state.useCustomRender}}tmac-tab-inactive{{/unless}}" title="{{#unless state.useCustomRender}}Only applied when Advanced Mode is enabled{{/unless}}"><i class="fa-solid fa-border-all"></i><span>Border</span></a>
       <a data-tmac-tab="fill" class="{{#unless state.useCustomRender}}tmac-tab-inactive{{/unless}}" title="{{#unless state.useCustomRender}}Only applied when Advanced Mode is enabled{{/unless}}"><i class="fa-solid fa-fill-drip"></i><span>Fill</span></a>
-      <a data-tmac-tab="label" class="{{#unless state.useCustomRender}}tmac-tab-inactive{{/unless}}" title="{{#unless state.useCustomRender}}Only applied when Advanced Mode is enabled{{/unless}}"><i class="fa-solid fa-font"></i><span>Label</span></a>
+      <a data-tmac-tab="label"><i class="fa-solid fa-font"></i><span>Label</span></a>
       <a data-tmac-tab="misc"><i class="fa-solid fa-layer-group"></i><span>Misc</span></a>
       {{#if showMacros}}
       <a data-tmac-tab="macros"><i class="fa-solid fa-code"></i><span>Macros</span></a>
@@ -115,10 +115,9 @@
 
       <section data-tmac-pane="geometry">
         <div class="form-group">
-          <label>Radius Offset</label>
+          <label>Radius Offset <span class="units">(px)</span></label>
           <div class="form-fields">
             <input type="number" name="radiusOffset" value="{{state.radiusOffset}}" step="1">
-            <span class="tmac-unit">px</span>
           </div>
           <p class="hint">Expand or contract the visual outline. Positive grows, negative shrinks.</p>
         </div>
@@ -134,10 +133,9 @@
 
         {{#if hasLine}}
           <div class="form-group">
-            <label>Line Width</label>
+            <label>Line Width <span class="units">(px)</span></label>
             <div class="form-fields">
               <input type="number" name="lineWidth" value="{{state.lineWidth}}" min="0.5" step="0.5">
-              <span class="tmac-unit">px</span>
             </div>
           </div>
 
@@ -171,24 +169,16 @@
 
           {{#if isDashed}}
             <div class="form-group">
-              <label>Dash Size</label>
+              <label>Dash Config <span class="units">(px)</span></label>
               <div class="form-fields">
-                <input type="number" name="lineDashSize" value="{{state.lineDashSize}}" min="1" step="1">
-                <span class="tmac-unit">px</span>
+                <input type="number" name="lineDashSize" value="{{state.lineDashSize}}" min="1" step="1" placeholder="dash">
+                <input type="number" name="lineGapSize" value="{{state.lineGapSize}}" min="1" step="1" placeholder="gap">
               </div>
             </div>
             <div class="form-group">
-              <label>Gap Size</label>
-              <div class="form-fields">
-                <input type="number" name="lineGapSize" value="{{state.lineGapSize}}" min="1" step="1">
-                <span class="tmac-unit">px</span>
-              </div>
-            </div>
-            <div class="form-group">
-              <label>Dash Scroll Speed</label>
+              <label>Dash Scroll Speed <span class="units">(px/s)</span></label>
               <div class="form-fields">
                 <input type="number" name="lineDashOffsetAnimation" value="{{state.lineDashOffsetAnimation}}" step="1">
-                <span class="tmac-unit">px/s</span>
               </div>
               <p class="hint">Positive scrolls forward, negative reverses.</p>
             </div>
@@ -244,23 +234,19 @@
           </div>
 
           <div class="form-group">
-            <label>Texture Scale</label>
-            <div class="form-fields tmac-xy">
-              <input type="number" name="fillTextureScaleX" value="{{state.fillTextureScale.x}}" min="1" step="1">
-              <span class="tmac-unit">% X</span>
-              <input type="number" name="fillTextureScaleY" value="{{state.fillTextureScale.y}}" min="1" step="1">
-              <span class="tmac-unit">% Y</span>
+            <label>Texture Scale <span class="units">(%)</span></label>
+            <div class="form-fields">
+              <input type="number" name="fillTextureScaleX" value="{{state.fillTextureScale.x}}" min="1" step="1" placeholder="x">
+              <input type="number" name="fillTextureScaleY" value="{{state.fillTextureScale.y}}" min="1" step="1" placeholder="y">
             </div>
           </div>
 
           {{#unless textureOffsetAnimationOn}}
             <div class="form-group">
-              <label>Texture Offset</label>
-              <div class="form-fields tmac-xy">
-                <input type="number" name="fillTextureOffsetX" value="{{state.fillTextureOffset.x}}" step="1">
-                <span class="tmac-unit">px X</span>
-                <input type="number" name="fillTextureOffsetY" value="{{state.fillTextureOffset.y}}" step="1">
-                <span class="tmac-unit">px Y</span>
+              <label>Texture Offset <span class="units">(px)</span></label>
+              <div class="form-fields">
+                <input type="number" name="fillTextureOffsetX" value="{{state.fillTextureOffset.x}}" step="1" placeholder="x">
+                <input type="number" name="fillTextureOffsetY" value="{{state.fillTextureOffset.y}}" step="1" placeholder="y">
                 <button type="button" class="tmac-anim-toggle" data-tmac-toggle-anim="offset" title="Animate offset">
                   <i class="fa-solid fa-wand-magic-sparkles"></i>
                 </button>
@@ -277,12 +263,10 @@
                 </button>
               </legend>
               <div class="form-group">
-                <label>Speed</label>
-                <div class="form-fields tmac-xy">
-                  <input type="number" name="fillTextureOffsetAnimationX" value="{{state.fillTextureOffsetAnimation.x}}" step="1">
-                  <span class="tmac-unit">px/s X</span>
-                  <input type="number" name="fillTextureOffsetAnimationY" value="{{state.fillTextureOffsetAnimation.y}}" step="1">
-                  <span class="tmac-unit">px/s Y</span>
+                <label>Speed <span class="units">(px/s)</span></label>
+                <div class="form-fields">
+                  <input type="number" name="fillTextureOffsetAnimationX" value="{{state.fillTextureOffsetAnimation.x}}" step="1" placeholder="x">
+                  <input type="number" name="fillTextureOffsetAnimationY" value="{{state.fillTextureOffsetAnimation.y}}" step="1" placeholder="y">
                 </div>
               </div>
             </fieldset>

@@ -1,7 +1,7 @@
 {
     "id": "templatemacro",
-    "title": "Template Macro",
-    "version": "13.0.2",
+    "title": "Lasossis's Template Macro",
+    "version": "14.0.2",
     "authors": [
         {
             "name": "Zhell",
@@ -12,9 +12,8 @@
         }
     ],
     "compatibility": {
-        "minimum": "11",
-        "maximum": "12",
-        "verified": "12"
+        "minimum": "13",
+        "verified": "13"
     },
     "esmodules": [
         "setup.mjs"

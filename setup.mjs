@@ -2,6 +2,8 @@ import {
   findGrids,
   findContained,
   findContainers,
+  getTemplatesAtPoint,
+  getTemplateOccupiedOffsets,
   placeZone,
   placeZoneWithStatusEffect,
   placeDangerousZone,
@@ -27,12 +29,13 @@ import {
 } from "./scripts/hooks.mjs";
 import { callMacro, registerCallback, unregisterCallbacks } from "./scripts/templatemacro.mjs";
 import { registerPatternFillHooks, FILL_TYPES } from "./scripts/patternFill.mjs";
+import { setupThtRulerOverlay } from "./scripts/tht-ruler-overlay.mjs";
 import { registerDragElevation } from "./scripts/drag-elevation.mjs";
 import { checkModuleUpdate } from "./scripts/version-check.mjs";
 
 class ZoneConfig extends FormApplication {
   static get defaultOptions() {
-    return mergeObject(super.defaultOptions, {
+    return foundry.utils.mergeObject(super.defaultOptions, {
       title: "Zone Configuration",
       id: "templatemacro-zone-config",
       template: "modules/templatemacro/templates/zone-config.html",
@@ -115,6 +118,8 @@ Hooks.once("setup", () => {
     findContainers,
     findContained,
     findGrids,
+    getTemplatesAtPoint,
+    getTemplateOccupiedOffsets,
     placeZone,
     placeZoneWithStatusEffect,
     placeDangerousZone,
@@ -150,25 +155,59 @@ Hooks.once("setup", () => {
     _registerLancerSettings();
   }
   Hooks.on("getSceneControlButtons", (controls) => {
-    const templateControls = controls.find(c => c.name === "measure");
+    // v13: control name is "templates" (renamed from v12 "measure"). controls/tools are keyed objects.
+    const templateControls = Array.isArray(controls)
+      ? (controls.find(c => c.name === "templates") || controls.find(c => c.name === "measure"))
+      : (controls?.templates ?? controls?.measure);
     if (!templateControls) return;
-    templateControls.tools.push({
+    const tool = {
       name: "templateLibrary",
       title: "Template Library",
       icon: "fas fa-folder-open",
       toggle: true,
       active: !!_findOpenLibrary(),
-      onClick: () => _toggleTemplateLibrary()
-    });
+      // v13 calls onChange(event, active) with the new toggle state.
+      onChange: (_event, active) => {
+        if (active) {
+          if (!_findOpenLibrary()) new TemplateLibraryConfig().render(true);
+        } else {
+          _closeTemplateLibrary();
+        }
+      }
+    };
+    if (Array.isArray(templateControls.tools)) {
+      tool.onClick = () => _toggleTemplateLibrary();
+      templateControls.tools.push(tool);
+    } else if (templateControls.tools) {
+      templateControls.tools["templateLibrary"] = tool;
+    }
   });
+
+  // Keep the toolbar toggle visually in sync when the library closes / opens by other means.
+  const _refreshLibraryToggle = (active) => {
+    const groups = ui.controls?.controls ?? {};
+    const group = groups.templates ?? groups.measure ?? null;
+    const toolsCollection = group?.tools;
+    const tool = toolsCollection?.templateLibrary
+      ?? (Array.isArray(toolsCollection)
+        ? toolsCollection.find(t => t.name === "templateLibrary")
+        : null);
+    if (!tool || tool.active === active) return;
+    tool.active = active;
+    ui.controls?.render();
+  };
+  Hooks.on("renderTemplateLibraryConfig", () => _refreshLibraryToggle(true));
+  Hooks.on("closeTemplateLibraryConfig", () => _refreshLibraryToggle(false));
   let _lastActiveControl = null;
   Hooks.on("renderSceneControls", (controls) => {
-    const current = controls?.activeControl ?? null;
-    const enteredMeasure = current === "measure" && _lastActiveControl !== "measure";
+    // v13: SceneControls#control is the active control object; v12 had .activeControl as a string.
+    const current = controls?.control?.name ?? controls?.activeControl ?? null;
+    const isTemplates = current === "templates" || current === "measure";
+    const enteredTemplates = isTemplates && !(_lastActiveControl === "templates" || _lastActiveControl === "measure");
     _lastActiveControl = current;
-    if (current !== "measure") {
+    if (!isTemplates) {
       _closeTemplateLibrary();
-    } else if (enteredMeasure && game.settings.get(MODULE, "autoOpenLibrary") && !_findOpenLibrary()) {
+    } else if (enteredTemplates && game.settings.get(MODULE, "autoOpenLibrary") && !_findOpenLibrary()) {
       new TemplateLibraryConfig().render(true);
     }
   });
@@ -178,6 +217,7 @@ Hooks.once("setup", () => {
   });
 
   registerPatternFillHooks();
+  setupThtRulerOverlay();
 });
 
 function _registerLancerSettings() {

@@ -1,5 +1,4 @@
 /* global FormApplication, Dialog, foundry, game, CONFIG, Hooks */
-
 import { MODULE } from "../constants.mjs";
 import { openEntryGraphicsConfig } from "./graphics-config.mjs";
 
@@ -129,14 +128,12 @@ function makeSpawnEntry(overrides = {}) {
 }
 
 export async function spawnLibraryEntry(entry) {
-  // active entry id is what preCreateMeasuredTemplate keys on to stamp graphics + macros
   setActiveEntryId(entry.id, null);
   try {
     if (game.system.id === "lancer" && game.lancer?.canvas?.WeaponRangeTemplate) {
       const preview = game.lancer.canvas.WeaponRangeTemplate.fromRange({ type: entry.templateType ?? "Blast", val: Math.max(entry.size ?? 1, 0) });
       await preview.placeTemplate();
     } else {
-      // non-lancer fallback: drop at scene center
       const cx = canvas.scene.dimensions.sceneX + canvas.scene.dimensions.sceneWidth / 2;
       const cy = canvas.scene.dimensions.sceneY + canvas.scene.dimensions.sceneHeight / 2;
       const tMap = { blast: "circle", burst: "circle", cone: "cone", line: "ray" };
@@ -154,7 +151,6 @@ export async function spawnLibraryEntry(entry) {
 
 export async function seedLibraryIfEmpty() {
   if (!game.user.isGM) return;
-  // the Dangerous / Status / Difficult presets are tuned for Lancer flows; skip on other systems
   if (game.system.id !== "lancer") return;
   const decorate = (entry, fill, line) => {
     entry.graphicsState.fillColor = fill;
@@ -170,34 +166,50 @@ export async function seedLibraryIfEmpty() {
   };
 
   const danger = makeEntry({ name: "Dangerous Zone", protectedKind: "danger", icon: "icons/svg/radiation.svg", protected: true });
+  danger.seedKey = "danger";
   decorate(danger, "#ff6400", "#ff6400");
 
   const status = makeEntry({ name: "Status Zone", protectedKind: "status", icon: "icons/svg/dice-target.svg", protected: true });
+  status.seedKey = "status";
   decorate(status, "#0088ff", "#0088ff");
 
-  const difficult = makeEntry({ name: "Difficult Terrain", icon: "icons/svg/mountain.svg" });
+  const difficult = makeEntry({ name: "Difficult Zone", icon: "icons/svg/mountain.svg" });
+  difficult.seedKey = "difficult";
   decorate(difficult, "#e83bd1", "#e83bd1");
   difficult.graphicsState.fillType = 2; // PATTERN
   difficult.graphicsState.fillTexture = "modules/templatemacro/textures/hatching-rock.png";
   difficult.graphicsState.movementPenalty = 1;
   difficult.graphicsState.flatMovementPenalty = true;
-  difficult.graphicsState.centerLabel = "Difficult\nTerrain";
+  difficult.graphicsState.centerLabel = "Difficult\nZone";
 
   const lib = getLibrary();
-  // upgrade legacy "Dangerous Zone" / "Status Zone" entries to protected, preserve their graphics
-  const upsertProtected = (seed, kind) => {
-    const idx = lib.findIndex(e => e.name === seed.name);
+
+  // Migrate pre-seedKey entries so renames don't trigger duplicates.
+  const legacyNameToKey = {
+    "Dangerous Zone": "danger",
+    "Status Zone": "status",
+    "Difficult Terrain": "difficult",
+    "Difficult Zone": "difficult"
+  };
+  for (const e of lib) {
+    if (!e.seedKey && legacyNameToKey[e.name]) e.seedKey = legacyNameToKey[e.name];
+  }
+
+  const upsert = (seed) => {
+    const idx = lib.findIndex(e => e.seedKey === seed.seedKey);
     if (idx >= 0) {
-      lib[idx].protected = true;
-      lib[idx].protectedKind = kind;
+      if (seed.protected) {
+        lib[idx].protected = true;
+        lib[idx].protectedKind = seed.protectedKind;
+      }
       lib[idx].icon = lib[idx].icon || seed.icon;
     } else {
       lib.push(seed);
     }
   };
-  upsertProtected(danger, "danger");
-  upsertProtected(status, "status");
-  if (!lib.some(e => e.name === difficult.name)) lib.push(difficult);
+  upsert(danger);
+  upsert(status);
+  upsert(difficult);
   await setLibrary(lib);
 }
 
@@ -261,15 +273,15 @@ export function applyEntryToTemplateData(doc, entry) {
     if (built.actions?.length) {
       update.flags[MODULE].actions = [...(update.flags[MODULE].actions ?? []), ...built.actions];
     }
-    if (built.elevationruler) update.flags.elevationruler = built.elevationruler;
-  } else if (game.modules.get("elevationruler")?.active && (g.movementPenalty ?? 0) !== 0) {
-    update.flags.elevationruler = {
-      movementPenalty: g.movementPenalty,
-      flatMovementPenalty: g.flatMovementPenalty ?? true
-    };
+    if (built.movement) {
+      update.flags[MODULE].movementPenalty = built.movement.movementPenalty;
+      update.flags[MODULE].flatMovementPenalty = built.movement.flatMovementPenalty;
+    }
+  } else if ((g.movementPenalty ?? 0) !== 0) {
+    update.flags[MODULE].movementPenalty = g.movementPenalty;
+    update.flags[MODULE].flatMovementPenalty = g.flatMovementPenalty ?? true;
   }
 
-  // hide the vanilla fill when our renderer takes over (tokenmagic-compatible flag)
   if (g.useCustomRender) {
     update.flags.tokenmagic = update.flags.tokenmagic ?? {};
     update.flags.tokenmagic.templateData = { ...(update.flags.tokenmagic.templateData ?? {}), opacity: 0 };
@@ -287,13 +299,11 @@ export function registerLibraryHooks() {
     applyEntryToTemplateData(doc, entry);
   });
 
-  // drop a library card onto the canvas to spawn / activate
   Hooks.on("dropCanvasData", async (_canvas, data) => {
     if (data?.type !== "templatemacro-entry") return;
     const entry = (data.kind === "preset" ? getLibrary() : getSpawnLibrary()).find(e => e.id === data.id);
     if (!entry) return false;
     if (data.kind === "spawn") {
-      // spawn at drop position using the entry's size + templateType
       setActiveEntryId(entry.id, null);
       try {
         const tMap = { blast: "circle", burst: "circle", cone: "cone", line: "ray" };
@@ -307,7 +317,6 @@ export function registerLibraryHooks() {
         setActiveEntryId(null);
       }
     } else {
-      // preset: activate and let the user draw with the standard tool
       const overrides = await _promptForKind(entry);
       if (overrides === null && _kindNeedsPrompt(entry.protectedKind)) return false;
       setActiveEntryId(entry.id, overrides ?? {});
@@ -324,7 +333,7 @@ export class TemplateLibraryConfig extends HandlebarsApplicationMixin(Applicatio
     classes: ["templatemacro", "tmac-library-config"],
     tag: "form",
     window: { title: "Template Library", icon: "fa-solid fa-folder-open", resizable: true },
-    position: { width: 320, height: "auto", top: 120, left: window.innerWidth - 360 }
+    position: { width: 320, height: "auto" }
   };
 
   static PARTS = {
@@ -392,6 +401,20 @@ export class TemplateLibraryConfig extends HandlebarsApplicationMixin(Applicatio
     ui.controls?.initialize?.();
   }
 
+  // crlngn-ui's `change-windows` rules lock left/top with !important, so bypass setPosition.
+  _positionNextToSidebar() {
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const sidebar = document.getElementById("sidebar") ?? ui.sidebar?.element;
+      const sidebarLeft = sidebar?.getBoundingClientRect?.().left;
+      if (!sidebarLeft) return;
+      const myWidth = this.element?.offsetWidth || 320;
+      const target = Math.round(sidebarLeft - myWidth - 15);
+      this.setPosition({ left: target, top: 5 });
+      this.element.style.setProperty("left", target + "px", "important");
+      this.element.style.setProperty("top", "5px", "important");
+    }));
+  }
+
   async _prepareContext() {
     const active = getActiveEntryId();
     const decorateEntry = (e) => {
@@ -444,10 +467,10 @@ export class TemplateLibraryConfig extends HandlebarsApplicationMixin(Applicatio
   }
 
   _onRender(_context, _options) {
+    this._positionNextToSidebar();
     const root = this.element;
     const on = (sel, evt, fn) => root.querySelectorAll(sel).forEach(el => el.addEventListener(evt, fn));
 
-    // drag a card: stash {kind, id} on the dragstart so the canvas / folder-header drop knows what landed
     on("[data-tmac-entry-id]", "dragstart", (ev) => {
       const kind = ev.currentTarget.dataset.tmacEntryKind;
       const id = ev.currentTarget.dataset.tmacEntryId;
@@ -455,7 +478,6 @@ export class TemplateLibraryConfig extends HandlebarsApplicationMixin(Applicatio
       ev.dataTransfer.effectAllowed = "move";
     });
 
-    // collapse / expand on click (skip the "no folder" root header)
     on("[data-tmac-folder-drop]", "click", (ev) => {
       const folder = ev.currentTarget.dataset.tmacFolderDrop ?? "";
       if (!folder) return;
@@ -468,7 +490,6 @@ export class TemplateLibraryConfig extends HandlebarsApplicationMixin(Applicatio
       ev.currentTarget.classList.toggle("collapsed");
     });
 
-    // right-click: rename or delete the folder
     on("[data-tmac-folder-drop]", "contextmenu", (ev) => {
       ev.preventDefault();
       const folder = ev.currentTarget.dataset.tmacFolderDrop ?? "";
@@ -477,7 +498,6 @@ export class TemplateLibraryConfig extends HandlebarsApplicationMixin(Applicatio
       this._openFolderMenu(folder, isPreset);
     });
 
-    // apply persisted collapse state from prior renders
     {
       const tab = this._activeTab ?? "presets";
       for (const header of root.querySelectorAll("[data-tmac-folder-drop]")) {
@@ -491,7 +511,6 @@ export class TemplateLibraryConfig extends HandlebarsApplicationMixin(Applicatio
       }
     }
 
-    // drop on a folder header: move the dragged entry into that folder
     on("[data-tmac-folder-drop]", "dragover", (ev) => { ev.preventDefault(); ev.dataTransfer.dropEffect = "move"; });
     on("[data-tmac-folder-drop]", "dragenter", (ev) => ev.currentTarget.classList.add("tmac-drag-over"));
     on("[data-tmac-folder-drop]", "dragleave", (ev) => ev.currentTarget.classList.remove("tmac-drag-over"));
@@ -545,7 +564,6 @@ export class TemplateLibraryConfig extends HandlebarsApplicationMixin(Applicatio
       const src = lib.find(e => e.id === id);
       if (!src) return;
 
-      // cloning a protected entry: prompt for kind options, bake them as actions on the copy
       if (src.protected && src.protectedKind) {
         const overrides = await _promptForKind(src);
         if (overrides === null && _kindNeedsPrompt(src.protectedKind)) return;
@@ -557,9 +575,9 @@ export class TemplateLibraryConfig extends HandlebarsApplicationMixin(Applicatio
         dup.protectedKind = null;
         dup.graphicsState = dup.graphicsState ?? {};
         dup.graphicsState.actions = [...(dup.graphicsState.actions ?? []), ...(built.actions ?? [])];
-        if (built.elevationruler) {
-          dup.graphicsState.movementPenalty = built.elevationruler.movementPenalty;
-          dup.graphicsState.flatMovementPenalty = built.elevationruler.flatMovementPenalty;
+        if (built.movement) {
+          dup.graphicsState.movementPenalty = built.movement.movementPenalty;
+          dup.graphicsState.flatMovementPenalty = built.movement.flatMovementPenalty;
         }
         lib.push(dup);
         await setLibrary(lib);
@@ -825,7 +843,6 @@ function _downloadJson(filename, data) {
 }
 
 function _openSpawnEditor(entry, onSubmit) {
-  // capture size + templateType first, then chain into the shared graphics form
   return new Promise((resolve) => {
     const opts = TEMPLATE_TYPES.map(t => `<option value="${t}" ${t === entry.templateType ? "selected" : ""}>${t}</option>`).join("");
     new Dialog({

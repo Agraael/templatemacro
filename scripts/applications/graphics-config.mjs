@@ -140,7 +140,7 @@ const DEFAULT_STATE = () => ({
   fillTextureScale: { x: 100, y: 100 },
   // Label
   centerLabel: "",
-  // Misc (elevationruler integration)
+  // Difficult terrain (read by lancer-automations movement cost)
   movementPenalty: 0,
   flatMovementPenalty: true,
   elevationGated: false,
@@ -208,8 +208,8 @@ function readTemplateDoc(doc) {
   state.fillTextureOffsetAnimation = flag("fillTextureOffsetAnimation", null);
   state.fillTextureScale = flag("fillTextureScale", { x: 100, y: 100 });
   state.centerLabel = flag("centerLabel", "");
-  state.movementPenalty = doc.getFlag("elevationruler", "movementPenalty") ?? 0;
-  state.flatMovementPenalty = doc.getFlag("elevationruler", "flatMovementPenalty") ?? true;
+  state.movementPenalty = flag("movementPenalty", 0);
+  state.flatMovementPenalty = flag("flatMovementPenalty", true);
   state.elevationGated = !!flag("elevationGated", false);
   state.elevationRangeManual = !!flag("elevationRangeManual", false);
   state.elevationRange = flag("elevationRange", 0);
@@ -256,17 +256,24 @@ export class TemplatemacroGraphicsConfig extends HandlebarsApplicationMixin(Docu
     body: { template: "modules/templatemacro/templates/graphics-config.html" }
   };
 
+  // DocumentSheetV2 demands a real Document. Our entry/placement/defaults openers have none, so pass a throwaway.
+  static _migrateConstructorParams(first) {
+    if (first?.document instanceof foundry.abstract.Document) return first;
+    const stub = new (getDocumentClass("MeasuredTemplate"))({ t: "circle", x: 0, y: 0, distance: 1 });
+    return { ...first, document: stub };
+  }
+
   constructor(options = {}) {
     super(options);
-    // V2 doc-sheet path passes {document}; other modes pass {mode, target, zoneType, onSubmit}
-    if (options.document?.documentName === "MeasuredTemplate") {
-      this.mode = MODES.TEMPLATE;
-      this.target = options.document;
-    } else {
-      this.mode = options.mode ?? MODES.TEMPLATE;
+    // Only Foundry's doc-sheet path omits mode and passes a real document. Our openers always set mode.
+    if (options.mode) {
+      this.mode = options.mode;
       this.target = options.target;
       this.zoneType = options.zoneType;
       this.onSubmit = options.onSubmit;
+    } else {
+      this.mode = MODES.TEMPLATE;
+      this.target = options.document;
     }
     this._formState = this._initState();
     this._activeTab = this.mode === MODES.TEMPLATE ? "template" : "geometry";
@@ -283,23 +290,6 @@ export class TemplatemacroGraphicsConfig extends HandlebarsApplicationMixin(Docu
   _canUserView() { return true; }
   _canUserEdit() { return true; }
 
-  // DocumentSheetV2 expects a real document; supply a synthetic stub for non-template modes
-  _initializeApplicationOptions(options) {
-    if (!options.document) {
-      const stubId = foundry.utils.randomID();
-      options.document = {
-        uuid: `templatemacro.${options.mode ?? "entry"}.${stubId}`,
-        id: stubId,
-        apps: {},
-        pack: null,
-        testUserPermission: () => true,
-        getFlag: () => undefined,
-        constructor: { metadata: { label: "Template" } }
-      };
-    }
-    return super._initializeApplicationOptions(options);
-  }
-
   _captureDocSnapshot() {
     const doc = this.target;
     return foundry.utils.deepClone({
@@ -307,8 +297,7 @@ export class TemplatemacroGraphicsConfig extends HandlebarsApplicationMixin(Docu
       direction: doc.direction, angle: doc.angle, distance: doc.distance, width: doc.width,
       borderColor: doc.borderColor, fillColor: doc.fillColor, texture: doc.texture, hidden: doc.hidden,
       tmacFlags: doc.flags?.templatemacro ?? {},
-      tokenmagicFlags: doc.flags?.tokenmagic ?? null,
-      elevationrulerFlags: doc.flags?.elevationruler ?? null
+      tokenmagicFlags: doc.flags?.tokenmagic ?? null
     });
   }
 
@@ -405,7 +394,7 @@ export class TemplatemacroGraphicsConfig extends HandlebarsApplicationMixin(Docu
       showTemplate,
       showEntryHeader,
       isTemplateMode: this.mode === MODES.TEMPLATE,
-      hasMovementRuler: !!game.modules.get("elevationruler")?.active || !!game.modules.get("lancer-automations")?.active,
+      hasMovementRuler: !!game.modules.get("lancer-automations")?.active,
       hasLancerAutomations: !!game.modules.get("lancer-automations")?.active,
       isCircle: s.t === "circle",
       templateTypes,
@@ -718,7 +707,6 @@ export class TemplatemacroGraphicsConfig extends HandlebarsApplicationMixin(Docu
       hidden: doc.hidden,
       flags: {
         templatemacro: doc.flags?.templatemacro ?? {},
-        elevationruler: doc.flags?.elevationruler ?? null,
         tokenmagic: doc.flags?.tokenmagic ?? null
       }
     };
@@ -763,7 +751,6 @@ export class TemplatemacroGraphicsConfig extends HandlebarsApplicationMixin(Docu
             if (typeof data.texture === "string") update.texture = data.texture;
             if (typeof data.hidden === "boolean") update.hidden = data.hidden;
             update["flags.templatemacro"] = data.flags.templatemacro;
-            if (data.flags.elevationruler) update["flags.elevationruler"] = data.flags.elevationruler;
             if (data.flags.tokenmagic) update["flags.tokenmagic"] = data.flags.tokenmagic;
             await doc.update(update);
             this._formState = this._initState();
@@ -825,7 +812,6 @@ export class TemplatemacroGraphicsConfig extends HandlebarsApplicationMixin(Docu
       "flags.templatemacro": snap.tmacFlags ?? {}
     };
     if (snap.tokenmagicFlags !== null) update["flags.tokenmagic"] = snap.tokenmagicFlags;
-    if (snap.elevationrulerFlags !== null) update["flags.elevationruler"] = snap.elevationrulerFlags;
     await this.target.update(update);
   }
 
@@ -1212,14 +1198,12 @@ export class TemplatemacroGraphicsConfig extends HandlebarsApplicationMixin(Docu
       if (trig === "never") continue;
       update[`flags.${MODULE}.-=${trig}`] = null;
     }
-    if (game.modules.get("elevationruler")?.active) {
-      if ((s.movementPenalty ?? 0) !== 0) {
-        update["flags.elevationruler.movementPenalty"] = s.movementPenalty;
-        update["flags.elevationruler.flatMovementPenalty"] = s.flatMovementPenalty;
-      } else {
-        update["flags.elevationruler.-=movementPenalty"] = null;
-        update["flags.elevationruler.-=flatMovementPenalty"] = null;
-      }
+    if ((s.movementPenalty ?? 0) !== 0) {
+      update[`flags.${MODULE}.movementPenalty`] = s.movementPenalty;
+      update[`flags.${MODULE}.flatMovementPenalty`] = s.flatMovementPenalty;
+    } else {
+      update[`flags.${MODULE}.-=movementPenalty`] = null;
+      update[`flags.${MODULE}.-=flatMovementPenalty`] = null;
     }
     if (s.useCustomRender && !prevUseCustom) {
       update["flags.tokenmagic.templateData.opacity"] = 0;
