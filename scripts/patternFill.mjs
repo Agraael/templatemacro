@@ -192,6 +192,11 @@ function _isoLabelSkew()
     };
 }
 
+export function refreshCenterLabel(template)
+{
+    return _refreshCenterLabel(template);
+}
+
 function _refreshCenterLabel(template)
 {
     const ownLabel = template.document.getFlag(MODULE, "centerLabel") ?? "";
@@ -199,9 +204,16 @@ function _refreshCenterLabel(template)
     const fallback = game.settings.get(MODULE, "defaultCenterLabel") ?? "";
     // Default label only applies to Advanced-Mode templates; everything else stays blank when empty.
     const baseLabel = ownLabel || (useCustom ? fallback : "");
-    const elev = template.document.elevation ?? 0;
-    const elevSuffix = (baseLabel && elev !== 0) ? ` ${elev > 0 ? "↑" : "↓"}${Math.abs(elev)}` : "";
-    const label = baseLabel ? `${baseLabel}${elevSuffix}` : "";
+    // const elev = template.document.elevation ?? 0;
+    // const elevSuffix = (baseLabel && elev !== 0) ? ` ${elev > 0 ? "↑" : "↓"}${Math.abs(elev)}` : "";
+    const elevSuffix = "";
+    const gated = !!template.document.getFlag(MODULE, "elevationGated");
+    const manual = !!template.document.getFlag(MODULE, "elevationRangeManual");
+    const heightVal = gated
+      ? (manual ? (template.document.getFlag(MODULE, "elevationRange") ?? 0) : Math.floor(template.document.distance ?? 0))
+      : 0;
+    const heightSuffix = (baseLabel && gated && heightVal > 0) ? ` ↕${heightVal}` : "";
+    const label = baseLabel ? `${baseLabel}${elevSuffix}${heightSuffix}` : "";
     const labelSize = game.settings.get(MODULE, "centerLabelSize") ?? 12;
 
     if (!label)
@@ -256,7 +268,18 @@ function _refreshCenterLabel(template)
     template._tmCenterLabel.rotation = 0;
     template._tmCenterLabel.skew.set(iso?.skewX ?? 0, iso?.skewY ?? 0);
     template._tmCenterLabel.scale.set(iso?.scaleX ?? 1, iso?.scaleY ?? 1);
-    template._tmCenterLabel.position.set(template.document.x, template.document.y);
+    const iconVisible = !!template.controlIcon?.visible;
+    const iconSize = template.controlIcon?.size ?? 0;
+    if (iconVisible)
+    {
+        template._tmCenterLabel.anchor.set(0.5, 0);
+        template._tmCenterLabel.position.set(template.document.x, template.document.y + (iconSize / 2) + 10);
+    }
+    else
+    {
+        template._tmCenterLabel.anchor.set(0.5, 0.5);
+        template._tmCenterLabel.position.set(template.document.x, template.document.y);
+    }
     // hide the original's label while a drag clone is showing
     if (template._original?._tmCenterLabel)
     {

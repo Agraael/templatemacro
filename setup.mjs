@@ -203,9 +203,11 @@ Hooks.once("setup", () => {
     // v13: SceneControls#control is the active control object; v12 had .activeControl as a string.
     const current = controls?.control?.name ?? controls?.activeControl ?? null;
     const isTemplates = current === "templates" || current === "measure";
-    const enteredTemplates = isTemplates && !(_lastActiveControl === "templates" || _lastActiveControl === "measure");
+    const wasTemplates = _lastActiveControl === "templates" || _lastActiveControl === "measure";
+    const enteredTemplates = isTemplates && !wasTemplates;
+    const leftTemplates = !isTemplates && wasTemplates;
     _lastActiveControl = current;
-    if (!isTemplates) {
+    if (leftTemplates) {
       _closeTemplateLibrary();
     } else if (enteredTemplates && game.settings.get(MODULE, "autoOpenLibrary") && !_findOpenLibrary()) {
       new TemplateLibraryConfig().render(true);
@@ -532,6 +534,13 @@ function _registerLancerSettings() {
     config: false,
     type: Array,
     default: []
+  });
+
+  game.settings.register(MODULE, "templateLibraryElevTool", {
+    scope: "client",
+    config: false,
+    type: Object,
+    default: { aware: false, manual: false, height: 0, elevation: 0 }
   });
 
   game.settings.registerMenu(MODULE, "templateLibrary", {

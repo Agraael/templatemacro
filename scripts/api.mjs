@@ -249,6 +249,8 @@ export function getTemplatesAtPoint(x, y)
         const tf = templateDoc.flags?.[MODULE] ?? {};
         const gated = isTemplateElevationGated(templateDoc);
         const band = gated ? getTemplateElevationBand(templateDoc) : null;
+        if (gated && band && cellOccludedByTerrain(x, y, band.base, band.range))
+            continue;
         // Effective colours: custom-render zones use their own line/fill flags, others use the native doc colours.
         const custom = !!tf.useCustomRender;
         out.push({

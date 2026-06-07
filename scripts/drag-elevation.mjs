@@ -1,4 +1,5 @@
 import { MODULE } from "./constants.mjs";
+import { refreshCenterLabel } from "./patternFill.mjs";
 
 let _pendingElevation = null;
 let _pendingCloneDoc = null;
@@ -23,8 +24,23 @@ function _adjustPreviewElevation(delta)
             _pendingOriginalId = t._original?.document?.id ?? null;
         }
         _pendingElevation += delta;
-        t.document.elevation = _pendingElevation;
-        t.renderFlags?.set?.({ refreshElevation: true });
+        const targets = [t, t._original].filter(x => x && !x.destroyed);
+        for (const tt of targets)
+        {
+            tt.document.elevation = _pendingElevation;
+            if (typeof tt._refreshElevation === "function")
+            {
+                try { tt._refreshElevation(); } catch { /* ignore */ }
+            }
+            const tip = tt.controlIcon?.tooltip;
+            if (tip && !tip.destroyed)
+            {
+                try { tip.updateText?.(false); } catch { /* ignore */ }
+            }
+            tt.renderFlags?.set?.({ refreshElevation: true });
+            try { refreshCenterLabel(tt); } catch { /* ignore */ }
+        }
+        try { canvas.app?.renderer?.render?.(canvas.stage); } catch { /* ignore */ }
     }
     return true;
 }
@@ -63,14 +79,14 @@ export function registerDragElevation()
     game.keybindings.register(MODULE, "previewElevationDown", {
         name: "Lower Template Elevation (while dragging)",
         hint: "While dragging a template preview, lower its elevation by 1.",
-        editable: [{ key: "BracketLeft" }],
+        editable: [{ key: "KeyQ" }],
         onDown: () => _adjustPreviewElevation(-1),
         precedence: CONST.KEYBINDING_PRECEDENCE?.PRIORITY ?? 1
     });
     game.keybindings.register(MODULE, "previewElevationUp", {
         name: "Raise Template Elevation (while dragging)",
         hint: "While dragging a template preview, raise its elevation by 1.",
-        editable: [{ key: "BracketRight" }],
+        editable: [{ key: "KeyE" }],
         onDown: () => _adjustPreviewElevation(1),
         precedence: CONST.KEYBINDING_PRECEDENCE?.PRIORITY ?? 1
     });

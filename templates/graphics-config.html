@@ -303,12 +303,12 @@
             <p class="hint">Tokens outside the band aren't counted. THT cells blocked by solid terrain are culled.</p>
           </div>
           <div class="form-group">
-            <label>Manual Range</label>
+            <label>Manual Height</label>
             <input type="checkbox" name="elevationRangeManual" {{#if state.elevationRangeManual}}checked{{/if}}>
             <p class="hint">Off: use template distance. On: use the value below.</p>
           </div>
           <div class="form-group">
-            <label>Range</label>
+            <label>Height</label>
             <div class="form-fields">
               <input type="number" name="elevationRange" value="{{state.elevationRange}}" step="any" min="0" class="tmac-num-wide">
               <span class="tmac-unit">gu (floor-rounded)</span>

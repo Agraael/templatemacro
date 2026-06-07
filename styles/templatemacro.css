@@ -771,3 +771,62 @@
   padding: 6px;
   cursor: pointer;
 }
+
+.tmac-library-config .tmac-lib-elev-tool {
+  margin-top: 8px;
+  padding: 2px 8px 6px;
+  border: 1px solid var(--color-border-light-tertiary);
+  border-radius: 4px;
+}
+
+.tmac-library-config .tmac-lib-elev-tool legend {
+  font-size: 0.82em;
+  padding: 0 4px;
+  font-weight: bold;
+}
+
+.tmac-library-config .tmac-lib-elev-toggles {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 0.85em;
+}
+
+.tmac-library-config .tmac-lib-elev-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  cursor: pointer;
+}
+
+.tmac-library-config .tmac-lib-elev-toggle input {
+  margin: 0;
+}
+
+.tmac-library-config .tmac-lib-elev-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.tmac-library-config .tmac-lib-elev-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.78em;
+  margin: 0;
+}
+
+.tmac-library-config .tmac-lib-elev-field input {
+  height: 26px;
+  padding: 0 6px;
+  text-align: right;
+  font-size: 1em;
+}
+
+.tmac-library-config .tmac-lib-elev-field input:disabled {
+  opacity: 0.4;
+}

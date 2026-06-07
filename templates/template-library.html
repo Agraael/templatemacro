@@ -122,4 +122,32 @@
     </button>
     {{/if}}
   {{/if}}
+
+  <fieldset class="tmac-lib-elev-tool">
+    <legend><i class="fa-solid fa-layer-group"></i> Elevation</legend>
+    <div class="tmac-lib-elev-toggles">
+      <label class="tmac-lib-elev-toggle">
+        <input type="checkbox" data-tmac-lib-elev-aware {{#if elevTool.aware}}checked{{/if}}>
+        <span>Aware</span>
+      </label>
+      {{#if elevTool.aware}}
+      <label class="tmac-lib-elev-toggle">
+        <input type="checkbox" data-tmac-lib-elev-manual {{#if elevTool.manual}}checked{{/if}}>
+        <span>Manual Height</span>
+      </label>
+      {{/if}}
+    </div>
+    {{#if elevTool.aware}}
+    <div class="tmac-lib-elev-fields">
+      <label class="tmac-lib-elev-field">
+        <span>Height</span>
+        <input type="number" data-tmac-lib-elev-height value="{{elevTool.height}}" step="any" min="0" {{#unless elevTool.manual}}disabled{{/unless}}>
+      </label>
+      <label class="tmac-lib-elev-field">
+        <span>Elevation</span>
+        <input type="number" data-tmac-lib-elev-elevation value="{{elevTool.elevation}}" step="any">
+      </label>
+    </div>
+    {{/if}}
+  </fieldset>
 </div>

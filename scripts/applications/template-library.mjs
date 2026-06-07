@@ -19,6 +19,30 @@ export function setActiveEntryId(id, overrides = null) {
   Hooks.callAll("templatemacro.activeLibraryEntryChanged", id);
 }
 
+const _elevTool = { aware: false, manual: false, height: 0, elevation: 0 };
+let _elevToolHydrated = false;
+function _hydrateElevTool() {
+  if (_elevToolHydrated) return;
+  _elevToolHydrated = true;
+  try {
+    const saved = game.settings.get(MODULE, "templateLibraryElevTool") ?? {};
+    if (saved.aware !== undefined) _elevTool.aware = !!saved.aware;
+    if (saved.manual !== undefined) _elevTool.manual = !!saved.manual;
+    if (saved.height !== undefined) _elevTool.height = Number(saved.height) || 0;
+    if (saved.elevation !== undefined) _elevTool.elevation = Number(saved.elevation) || 0;
+  } catch { /* setting not registered yet */ }
+}
+export function getLibraryElevTool() { _hydrateElevTool(); return { ..._elevTool }; }
+export function setLibraryElevTool(patch = {}) {
+  _hydrateElevTool();
+  if (patch.aware !== undefined) _elevTool.aware = !!patch.aware;
+  if (patch.manual !== undefined) _elevTool.manual = !!patch.manual;
+  if (patch.height !== undefined) _elevTool.height = Number(patch.height) || 0;
+  if (patch.elevation !== undefined) _elevTool.elevation = Number(patch.elevation) || 0;
+  try { game.settings.set(MODULE, "templateLibraryElevTool", { ..._elevTool }); }
+  catch { /* setting not registered yet */ }
+}
+
 function _defaultGraphics() {
   return {
     useCustomRender: true,
@@ -287,6 +311,21 @@ export function applyEntryToTemplateData(doc, entry) {
     update.flags.tokenmagic.templateData = { ...(update.flags.tokenmagic.templateData ?? {}), opacity: 0 };
   }
 
+  if (_elevTool.aware) {
+    delete update.flags[MODULE]["-=elevationGated"];
+    delete update.flags[MODULE]["-=elevationRangeManual"];
+    delete update.flags[MODULE]["-=elevationRange"];
+    update.flags[MODULE].elevationGated = true;
+    if (_elevTool.manual) {
+      update.flags[MODULE].elevationRangeManual = true;
+      update.flags[MODULE].elevationRange = _elevTool.height;
+    } else {
+      update.flags[MODULE].elevationRangeManual = false;
+      update.flags[MODULE].elevationRange = 0;
+    }
+    update.elevation = _elevTool.elevation;
+  }
+
   doc.updateSource(update);
 }
 
@@ -462,7 +501,8 @@ export class TemplateLibraryConfig extends HandlebarsApplicationMixin(Applicatio
       presetGroups: groupByFolder(getLibrary().map(decorateEntry), presetFolders),
       spawnGroups: groupByFolder(getSpawnLibrary().map(decorateEntry), spawnFolders),
       isGM: game.user.isGM,
-      hasActive: !!active
+      hasActive: !!active,
+      elevTool: { ..._elevTool }
     };
   }
 
@@ -470,6 +510,21 @@ export class TemplateLibraryConfig extends HandlebarsApplicationMixin(Applicatio
     this._positionNextToSidebar();
     const root = this.element;
     const on = (sel, evt, fn) => root.querySelectorAll(sel).forEach(el => el.addEventListener(evt, fn));
+
+    on("[data-tmac-lib-elev-aware]", "change", (ev) => {
+      setLibraryElevTool({ aware: ev.currentTarget.checked });
+      this.render();
+    });
+    on("[data-tmac-lib-elev-manual]", "change", (ev) => {
+      setLibraryElevTool({ manual: ev.currentTarget.checked });
+      this.render();
+    });
+    on("[data-tmac-lib-elev-height]", "change", (ev) => {
+      setLibraryElevTool({ height: ev.currentTarget.value });
+    });
+    on("[data-tmac-lib-elev-elevation]", "change", (ev) => {
+      setLibraryElevTool({ elevation: ev.currentTarget.value });
+    });
 
     on("[data-tmac-entry-id]", "dragstart", (ev) => {
       const kind = ev.currentTarget.dataset.tmacEntryKind;
