@@ -88,9 +88,10 @@ export async function _updateToken(tokenDoc, update, context, userId)
             }
         }
     }
+    // tokenDoc.x/y may be stale during ruler segments; prefer update coords like finalPos below.
     const coords = {
-        x: tokenDoc.x,
-        y: tokenDoc.y
+        x: update.x ?? tokenDoc.x,
+        y: update.y ?? tokenDoc.y
     };
     const previousCoords = foundry.utils.getProperty(context, `${MODULE}.coords.previous`);
 
@@ -109,18 +110,57 @@ export async function _updateToken(tokenDoc, update, context, userId)
     const leaving = previous.filter(p => !current.includes(p));
     const entering = current.filter(p => !previous.includes(p));
     const staying = previous.filter(p => current.includes(p));
+    // Walk the full v13 movement path so multi-waypoint drags detect all crossed templates,
+    // not just the last ruler segment. Use the token's real center (hex-aware) so the ray
+    // lands inside the correct cell instead of clipping neighbouring hexes.
+    const toCenter = (pt) =>
+    {
+        const c = tokenDoc.getCenterPoint?.({ x: pt.x, y: pt.y });
+        if (c) return c;
+        const sx = canvas.grid.sizeX ?? canvas.grid.size;
+        const sy = canvas.grid.sizeY ?? canvas.grid.size;
+        return { x: pt.x + (tokenDoc.width ?? 1) * sx / 2, y: pt.y + (tokenDoc.height ?? 1) * sy / 2 };
+    };
+    const pathPoints = [];
+    const origin = tokenDoc.movement?.origin;
+    const passed = tokenDoc.movement?.passed?.waypoints;
+    if (origin && Array.isArray(passed) && passed.length > 0)
+    {
+        pathPoints.push(toCenter(origin));
+        for (const wp of passed)
+            pathPoints.push(toCenter(wp));
+    }
+    else if (previousCoords)
+    {
+        pathPoints.push(toCenter(previousCoords), toCenter(coords));
+    }
     const through = tokenDoc.parent.templates.reduce((acc, templateDoc) =>
     {
-        const cells = findGrids(previousCoords, coords, templateDoc, tokenDoc.elevation ?? 0);
-        if (!cells.length)
+        const cellSet = new Set();
+        const cellsList = [];
+        for (let i = 1; i < pathPoints.length; i++)
+        {
+            const cells = findGrids(pathPoints[i - 1], pathPoints[i], templateDoc, tokenDoc.elevation ?? 0);
+            for (const c of cells)
+            {
+                const k = `${c.x},${c.y}`;
+                if (cellSet.has(k)) continue;
+                cellSet.add(k);
+                cellsList.push(c);
+            }
+        }
+        if (!cellsList.length)
             return acc;
         acc.push({
             templateId: templateDoc.id,
-            cells
+            cells: cellsList
         });
         return acc;
     }, []);
     foundry.utils.setProperty(context, `${MODULE}.through`, through);
+
+    if (globalThis._tmDebug)
+        _drawTmDebug(pathPoints, through);
 
     const enteredAndLeft = through.filter(t =>
     {
@@ -142,12 +182,17 @@ export async function _updateToken(tokenDoc, update, context, userId)
     function call(id, trigger)
     {
         const templateDoc = tokenDoc.parent.templates.get(id);
-        if (templateDoc)
-            callMacro(templateDoc, trigger, macroContext);
+        if (!templateDoc)
+            return Promise.resolve();
+        return callMacro(templateDoc, trigger, macroContext) ?? Promise.resolve();
     }
-    enteredAndLeft.forEach(({
-        templateId
-    }) => call(templateId, "whenThrough"));
+    // Traversal: await whenEntered before whenLeft so apply-on-enter completes before remove-on-leave runs.
+    for (const { templateId } of enteredAndLeft)
+    {
+        await call(templateId, "whenEntered");
+        await call(templateId, "whenThrough");
+        await call(templateId, "whenLeft");
+    }
     leaving.forEach(templateId => call(templateId, "whenLeft"));
     entering.forEach(templateId => call(templateId, "whenEntered"));
     staying.forEach(templateId => call(templateId, "whenStaying"));
@@ -335,4 +380,42 @@ export function _updateCombat(combat, update, context, userId)
         const template = canvas.scene.templates.get(id);
         callMacro(template, "whenTurnStart", macroContext.curr);
     }
+}
+
+function _drawTmDebug(pathPoints, through)
+{
+    const gs = canvas.grid.size;
+    const g = new PIXI.Graphics();
+    canvas.controls.addChild(g);
+
+    g.lineStyle(2, 0xff00ff);
+    for (let i = 0; i < pathPoints.length; i++)
+    {
+        const p = pathPoints[i];
+        const c = canvas.grid.getCenterPoint({ x: p.x, y: p.y });
+        g.drawCircle(p.x, p.y, 8);
+        g.lineStyle(2, 0xffaa00);
+        g.drawCircle(c.x, c.y, 14);
+        g.lineStyle(2, 0xff00ff);
+        if (i > 0)
+        {
+            const prev = pathPoints[i - 1];
+            g.moveTo(prev.x, prev.y);
+            g.lineTo(p.x, p.y);
+        }
+    }
+
+    g.lineStyle(2, 0x00ffff);
+    for (const t of through)
+        for (const c of t.cells)
+            g.drawRect(c.x, c.y, gs, gs);
+
+    setTimeout(() =>
+    {
+        if (!g.destroyed)
+        {
+            g.parent?.removeChild(g);
+            g.destroy();
+        }
+    }, 4000);
 }

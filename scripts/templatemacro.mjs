@@ -34,6 +34,7 @@ export function callMacro(templateDoc, whenWhat, context)
 {
     const scene = templateDoc.parent;
     const token = scene.tokens.get(context.tokenId)?.object ?? null;
+    const promises = [];
 
     const registryKey = `${templateDoc.id}::${whenWhat}`;
     const registered = _callbackRegistry.get(registryKey);
@@ -41,18 +42,19 @@ export function callMacro(templateDoc, whenWhat, context)
     {
         const id = registered.asGM ? context.gmId : context.userId;
         if (game.user.id !== id)
-            return;
+            return Promise.resolve();
         templateDoc.object?.refresh();
         try
         {
-            registered.fn(templateDoc, scene, token, context);
+            const r = registered.fn(templateDoc, scene, token, context);
+            if (r && typeof r.then === "function")
+                promises.push(r);
         }
         catch (e)
         {
             console.error(`templatemacro | Error in registered callback for ${whenWhat} on template ${templateDoc.id}:`, e);
         }
-        // registered callback handled it; the flag-based command is the same function persisted for reloads
-        return;
+        return Promise.all(promises);
     }
 
     const script = templateDoc.getFlag(MODULE, `${whenWhat}.command`);
@@ -63,9 +65,14 @@ export function callMacro(templateDoc, whenWhat, context)
         if (game.user.id === id)
         {
             templateDoc.object?.refresh();
-            const body = `(async()=>{\n${script}\n})();`;
+            const body = `return (async()=>{\n${script}\n})();`;
             const fn = Function("template", "scene", "token", body);
-            try { fn.call(context, templateDoc, scene, token); }
+            try
+            {
+                const r = fn.call(context, templateDoc, scene, token);
+                if (r && typeof r.then === "function")
+                    promises.push(r);
+            }
             catch (e) { console.error(`templatemacro | Error in legacy ${whenWhat} script:`, e); }
         }
     }
@@ -86,15 +93,21 @@ export function callMacro(templateDoc, whenWhat, context)
         {
             if (action.actionType === "code" && action.code)
             {
-                const body = `(async()=>{\n${action.code}\n})();`;
+                const body = `return (async()=>{\n${action.code}\n})();`;
                 const fn = Function("template", "scene", "token", body);
-                fn.call(context, templateDoc, scene, token);
+                const r = fn.call(context, templateDoc, scene, token);
+                if (r && typeof r.then === "function")
+                    promises.push(r);
             }
             else if (action.actionType === "macro" && action.macroUuid)
             {
                 const macro = fromUuidSync(action.macroUuid);
                 if (macro?.execute)
-                    macro.execute({ template: templateDoc, scene, token, actor: token?.actor });
+                {
+                    const r = macro.execute({ template: templateDoc, scene, token, actor: token?.actor });
+                    if (r && typeof r.then === "function")
+                        promises.push(r);
+                }
             }
             else if (action.actionType === "effect" && action.effectName)
             {
@@ -107,7 +120,7 @@ export function callMacro(templateDoc, whenWhat, context)
                 {
                     const e = a.effects.find(x => x.statuses.has(sid) && x.getFlag(MODULE, "sourceTemplate") === tid);
                     if (e)
-                        a.deleteEmbeddedDocuments("ActiveEffect", [e.id]);
+                        promises.push(a.deleteEmbeddedDocuments("ActiveEffect", [e.id]));
                 }
                 else
                 {
@@ -118,7 +131,7 @@ export function callMacro(templateDoc, whenWhat, context)
                         if (def)
                         {
                             const name = game.i18n.localize(def.name || def.label || sid);
-                            a.createEmbeddedDocuments("ActiveEffect", [{ ...def, name, statuses: [sid], "flags.templatemacro.sourceTemplate": tid }]);
+                            promises.push(a.createEmbeddedDocuments("ActiveEffect", [{ ...def, name, statuses: [sid], "flags.templatemacro.sourceTemplate": tid }]));
                         }
                     }
                 }
@@ -129,6 +142,7 @@ export function callMacro(templateDoc, whenWhat, context)
             console.error(`templatemacro | Error in action (${action.trigger} / ${action.actionType}):`, e);
         }
     }
+    return Promise.all(promises);
 }
 
 function _resolveTemplateSourceToken(templateDoc)
