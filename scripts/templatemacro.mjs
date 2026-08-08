@@ -112,7 +112,10 @@ export function callMacro(templateDoc, whenWhat, context)
             else if (action.actionType === "effect" && action.effectName)
             {
                 if (!token?.actor)
+                {
+                    promises.push(_applyTemplateEffect(templateDoc, scene, action, action.effectName, templateDoc.id, sourceToken));
                     continue;
+                }
                 const a = token.actor;
                 const tid = templateDoc.id;
                 const sid = action.effectName;
@@ -143,6 +146,46 @@ export function callMacro(templateDoc, whenWhat, context)
         }
     }
     return Promise.all(promises);
+}
+
+async function _applyTemplateEffect(templateDoc, scene, action, sid, tid, sourceToken)
+{
+    if (action.effectMode === "remove")
+    {
+        for (const tokenDoc of scene.tokens)
+        {
+            const actor = tokenDoc.actor;
+            const found = actor?.effects.find(eff => eff.statuses.has(sid) && eff.getFlag(MODULE, "sourceTemplate") === tid);
+            if (found)
+                await actor.deleteEmbeddedDocuments("ActiveEffect", [found.id]);
+        }
+        return;
+    }
+    let retries = 0;
+    while (!templateDoc.object?.shape && retries < 10)
+    {
+        await new Promise(resolve => setTimeout(resolve, 50));
+        retries++;
+    }
+    const api = game.modules.get(MODULE)?.api;
+    const contained = api?.findContained?.(templateDoc) ?? [];
+    for (const containedId of contained)
+    {
+        const targetToken = scene.tokens.get(containedId)?.object;
+        const actor = targetToken?.actor;
+        if (!actor)
+            continue;
+        if (!_targetFilterMatches(action.targetFilter ?? "ALL", targetToken, sourceToken))
+            continue;
+        const exists = actor.effects.find(eff => eff.statuses.has(sid) && eff.getFlag(MODULE, "sourceTemplate") === tid);
+        if (exists)
+            continue;
+        const def = CONFIG.statusEffects.find(entry => entry.id === sid);
+        if (!def)
+            continue;
+        const name = game.i18n.localize(def.name || def.label || sid);
+        await actor.createEmbeddedDocuments("ActiveEffect", [{ ...def, name, statuses: [sid], "flags.templatemacro.sourceTemplate": tid }]);
+    }
 }
 
 function _resolveTemplateSourceToken(templateDoc)

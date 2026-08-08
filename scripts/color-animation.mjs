@@ -77,7 +77,7 @@ export function sampleColorAnimation(anim, nowMs)
     return { color: hexToInt(kfs[0].color), alpha: kfs[0].alpha };
 }
 
-/** Build a default 2-stop pulse animation. */
+/** Build a default 3-stop pulse animation. */
 export function buildPulseAnimation(color, baseAlpha, durationMs = 1000)
 {
     return {

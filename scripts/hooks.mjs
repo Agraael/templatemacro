@@ -101,7 +101,6 @@ export async function _updateToken(tokenDoc, update, context, userId)
     {
         return user.active && user.isGM;
     }) ?? {};
-    // ruler segments may not have synced tokenDoc.x/y yet, so prefer update coords
     const finalPos = (update.x !== undefined || update.y !== undefined)
         ? { x: update.x ?? tokenDoc.x, y: update.y ?? tokenDoc.y }
         : null;
@@ -110,9 +109,8 @@ export async function _updateToken(tokenDoc, update, context, userId)
     const leaving = previous.filter(p => !current.includes(p));
     const entering = current.filter(p => !previous.includes(p));
     const staying = previous.filter(p => current.includes(p));
-    // Walk the full v13 movement path so multi-waypoint drags detect all crossed templates,
-    // not just the last ruler segment. Use the token's real center (hex-aware) so the ray
-    // lands inside the correct cell instead of clipping neighbouring hexes.
+    // Walk the full v13 movement path so multi-waypoint drags detect every crossed template.
+    // Use the token's real (hex-aware) center so the ray lands in the correct cell.
     const toCenter = (pt) =>
     {
         const c = tokenDoc.getCenterPoint?.({ x: pt.x, y: pt.y });

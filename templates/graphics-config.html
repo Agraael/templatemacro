@@ -103,6 +103,19 @@
           </div>
         {{/unless}}
 
+        {{#if hasTokenMagic}}
+        <div class="form-group tmac-row">
+          <label>Special Effect</label>
+          <select name="tmfxPreset">
+            {{#each tmfxPresetOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+          </select>
+        </div>
+        <div class="form-group tmac-row">
+          <label>Effect Tint</label>
+          <color-picker name="tmfxTint" value="{{state.tmfxTint}}"></color-picker>
+        </div>
+        {{/if}}
+
         <div class="form-group">
           <label>Attached To</label>
           <select name="attachedTokenId">

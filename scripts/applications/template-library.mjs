@@ -814,8 +814,10 @@ function _buildProtectedBehavior(kind, overrides = {}) {
     const effects = overrides.statusEffects ?? [];
     for (const sid of effects) {
       out.actions.push(
+        { id: foundry.utils.randomID(), trigger: "whenCreated", actionType: "effect", asGM: false, code: "", macroUuid: "", effectName: sid, effectMode: "apply" },
         { id: foundry.utils.randomID(), trigger: "whenEntered", actionType: "effect", asGM: false, code: "", macroUuid: "", effectName: sid, effectMode: "apply" },
-        { id: foundry.utils.randomID(), trigger: "whenLeft", actionType: "effect", asGM: false, code: "", macroUuid: "", effectName: sid, effectMode: "remove" }
+        { id: foundry.utils.randomID(), trigger: "whenLeft", actionType: "effect", asGM: false, code: "", macroUuid: "", effectName: sid, effectMode: "remove" },
+        { id: foundry.utils.randomID(), trigger: "whenDeleted", actionType: "effect", asGM: false, code: "", macroUuid: "", effectName: sid, effectMode: "remove" }
       );
     }
   }

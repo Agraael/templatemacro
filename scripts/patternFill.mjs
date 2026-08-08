@@ -858,7 +858,8 @@ function _suppressNativeShape(template)
     if (!template?.template)
         return;
     const useCustom = !!template.document?.getFlag(MODULE, "useCustomRender");
-    template.template.alpha = useCustom ? 0 : 1;
+    const tmfxOpacity = template.document?.getFlag("tokenmagic", "templateData")?.opacity;
+    template.template.alpha = useCustom ? 0 : (tmfxOpacity > 0 ? tmfxOpacity : 1);
 }
 
 function _getBorderGfx(template)
@@ -903,6 +904,56 @@ async function _applyCustomControlIcon(template)
     }
 }
 
+const _tmfxResyncTimers = new Map();
+
+function _resyncTmfxFilters(template)
+{
+    const id = template?.document?.id;
+    const tm = window.TokenMagic;
+    if (!id || !tm?._singleLoadFilters || !template.document?.flags?.tokenmagic?.filters?.length)
+        return;
+    const map = tm._getAnimeMap?.();
+    if (map)
+    {
+        for (const [key, anime] of map)
+            if (anime?.puppet?.placeableId === id)
+                map.delete(key);
+    }
+    tm._clearImgFiltersByPlaceable(template);
+    tm._singleLoadFilters(template);
+}
+
+function _tmfxNeedsResync(template)
+{
+    const tm = window.TokenMagic;
+    const flagFilters = template.document?.flags?.tokenmagic?.filters;
+    if (!(tm?._getAnimeMap && flagFilters?.length))
+        return false;
+    const applied = template.template?.filters?.filter(entry => entry.filterId) ?? [];
+    if (!applied.length)
+        return true;
+    const puppets = new Set();
+    for (const anime of tm._getAnimeMap().values())
+        puppets.add(anime.puppet);
+    return applied.some(entry => entry.animated && !puppets.has(entry));
+}
+
+function _scheduleTmfxResync(template, attempt = 0)
+{
+    const id = template?.document?.id;
+    if (!id)
+        return;
+    clearTimeout(_tmfxResyncTimers.get(id));
+    _tmfxResyncTimers.set(id, setTimeout(() =>
+    {
+        _tmfxResyncTimers.delete(id);
+        if (!template.loadingRequest && _tmfxNeedsResync(template))
+            _resyncTmfxFilters(template);
+        if (attempt < 12)
+            _scheduleTmfxResync(template, attempt + 1);
+    }, 150));
+}
+
 export function registerPatternFillHooks()
 {
     preloadTextures();
@@ -934,6 +985,8 @@ export function registerPatternFillHooks()
                 useCustomChanged ? template.draw() : template.refresh();
                 _refreshMergeSiblings(doc);
             }, 50);
+            if (game.modules.get("tokenmagic")?.active)
+                _scheduleTmfxResync(template);
         }
     });
 
@@ -941,6 +994,8 @@ export function registerPatternFillHooks()
 
     Hooks.on("deleteMeasuredTemplate", (doc) =>
     {
+        clearTimeout(_tmfxResyncTimers.get(doc.id));
+        _tmfxResyncTimers.delete(doc.id);
         _geometryCache.delete(doc.id);
         const state = animationState.get(doc.id);
         if (state)
@@ -966,6 +1021,8 @@ export function registerPatternFillHooks()
         _refreshCenterLabel(template);
         _applyCustomControlIcon(template);
         _suppressNativeShape(template);
+        if (game.modules.get("tokenmagic")?.active)
+            _scheduleTmfxResync(template);
     });
 
     Hooks.on("refreshMeasuredTemplate", (template) =>

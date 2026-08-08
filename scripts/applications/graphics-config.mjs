@@ -115,6 +115,9 @@ const DEFAULT_STATE = () => ({
   fillColorNative: "#0d0d0d",
   textureNative: "",
   hidden: false,
+  // TokenMagic FX native fields (non-advanced mode)
+  tmfxPreset: "NOFX",
+  tmfxTint: "",
   attachedTokenId: "",
   // Rendering mode
   useCustomRender: false,
@@ -188,6 +191,9 @@ function readTemplateDoc(doc) {
   state.fillColorNative = doc.fillColor ?? "#0d0d0d";
   state.textureNative = doc.texture ?? "";
   state.hidden = !!doc.hidden;
+  const tmfxData = doc.getFlag("tokenmagic", "templateData") ?? {};
+  state.tmfxPreset = tmfxData.preset ?? "NOFX";
+  state.tmfxTint = typeof tmfxData.tint === "number" ? intToHex(tmfxData.tint) : (tmfxData.tint ?? "");
   state.attachedTokenId = flag("attachedTokenId", "");
   state.useCustomRender = !!flag("useCustomRender", false);
   state.radiusOffset = flag("radiusOffset", 0);
@@ -347,6 +353,10 @@ export class TemplatemacroGraphicsConfig extends HandlebarsApplicationMixin(Docu
       selected: t.id === s.attachedTokenId
     }));
     tokenOptions.unshift({ value: "", label: "None", selected: !s.attachedTokenId });
+    const hasTokenMagic = !!game.modules.get("tokenmagic")?.active;
+    const tmfxPresets = hasTokenMagic ? (window.TokenMagic?.getPresets?.("tmfx-template") ?? []) : [];
+    const tmfxPresetOptions = [{ value: "NOFX", label: "None", selected: (s.tmfxPreset ?? "NOFX") === "NOFX" }]
+      .concat(tmfxPresets.map(preset => ({ value: preset.name, label: preset.name, selected: preset.name === s.tmfxPreset })));
     const lineEasing = s.lineColorAnimation?.easingFunc;
     const fillEasing = s.fillColorAnimation?.easingFunc;
     const triggerOptions = TRIGGERS.filter(t => t !== "never").map(t => ({ value: t, label: t }));
@@ -396,6 +406,8 @@ export class TemplatemacroGraphicsConfig extends HandlebarsApplicationMixin(Docu
       isTemplateMode: this.mode === MODES.TEMPLATE,
       hasMovementRuler: !!game.modules.get("lancer-automations")?.active,
       hasLancerAutomations: !!game.modules.get("lancer-automations")?.active,
+      hasTokenMagic,
+      tmfxPresetOptions,
       isCircle: s.t === "circle",
       templateTypes,
       tokenOptions,
@@ -1021,6 +1033,8 @@ export class TemplatemacroGraphicsConfig extends HandlebarsApplicationMixin(Docu
       s.fillColorNative = str(fd.fillColorNative, s.fillColorNative);
       s.textureNative = str(fd.textureNative, s.textureNative);
       s.hidden = !!fd.hidden;
+      s.tmfxPreset = str(fd.tmfxPreset, s.tmfxPreset);
+      s.tmfxTint = str(fd.tmfxTint, s.tmfxTint);
       s.attachedTokenId = str(fd.attachedTokenId, s.attachedTokenId);
     }
     if (this.mode === MODES.ENTRY) {
@@ -1207,6 +1221,21 @@ export class TemplatemacroGraphicsConfig extends HandlebarsApplicationMixin(Docu
     }
     if (s.useCustomRender && !prevUseCustom) {
       update["flags.tokenmagic.templateData.opacity"] = 0;
+    }
+    if (game.modules.get("tokenmagic")?.active) {
+      update["flags.tokenmagic.templateData.preset"] = s.tmfxPreset || "NOFX";
+      update["flags.tokenmagic.templateData.tint"] = s.tmfxTint || "";
+      const tmfxOpacity = t.getFlag("tokenmagic", "templateData")?.opacity;
+      update["flags.tokenmagic.templateData.opacity"] = s.useCustomRender ? 0 : (tmfxOpacity > 0 ? tmfxOpacity : 1);
+      const TMFX_TEXTURE_DIR = "modules/tokenmagic/fx/assets/templates/";
+      const currentTexture = update.texture ?? "";
+      const isTmfxTexture = currentTexture.startsWith(TMFX_TEXTURE_DIR);
+      if (s.tmfxPreset && s.tmfxPreset !== "NOFX") {
+        const presetTexture = window.TokenMagic?._getPresetTemplateDefaultTexture?.(s.tmfxPreset);
+        if (presetTexture && (!currentTexture || isTmfxTexture)) update.texture = presetTexture;
+      } else if (isTmfxTexture) {
+        update.texture = "";
+      }
     }
     // suppress auto-render: we wrote this update from the sheet, no need for Foundry to rerender us
     await this.target.update(update, { render: false });
