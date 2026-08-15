@@ -356,6 +356,7 @@ export async function placeZone(options = {}, hooks = {})
         fillPulse = false,
         fillPulseSpeed = 1,
         centerLabel = "",
+        elevation = 0,
         tmacGraphics = null
     } = _merged;
 
@@ -402,6 +403,7 @@ export async function placeZone(options = {}, hooks = {})
             if (template)
             {
                 await template.update({
+                    ...(x !== undefined && y !== undefined ? { elevation } : {}),
                     fillColor: effFillColor,
                     borderColor: effBorderColor,
                     texture: texture || template.texture,
@@ -438,6 +440,7 @@ export async function placeZone(options = {}, hooks = {})
             user: game.user.id,
             x,
             y,
+            elevation,
             distance: adjustedSize,
             fillColor: effFillColor,
             borderColor: effBorderColor,

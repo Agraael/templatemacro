@@ -30,7 +30,7 @@ import {
 import { callMacro, registerCallback, unregisterCallbacks } from "./scripts/templatemacro.mjs";
 import { registerPatternFillHooks, FILL_TYPES } from "./scripts/patternFill.mjs";
 import { setupThtRulerOverlay } from "./scripts/tht-ruler-overlay.mjs";
-import { registerDragElevation } from "./scripts/drag-elevation.mjs";
+import { registerDragElevation, setPreviewElevationBase } from "./scripts/drag-elevation.mjs";
 import { checkModuleUpdate } from "./scripts/version-check.mjs";
 
 class ZoneConfig extends FormApplication {
@@ -128,7 +128,8 @@ Hooks.once("setup", () => {
     registerCallback,
     unregisterCallbacks,
     attachTemplateToToken,
-    detachTemplateFromToken
+    detachTemplateFromToken,
+    setPreviewElevationBase
   };
 
   MeasuredTemplateDocument.prototype.callMacro = async function(type = "never", options = {}) {
