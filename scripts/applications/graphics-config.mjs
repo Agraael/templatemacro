@@ -97,6 +97,14 @@ function _listTargetFilterGroups() {
   return { flat, groups };
 }
 
+function _listStatusEffects() {
+  const entries = (CONFIG.statusEffects ?? [])
+    .filter(status => status?.id)
+    .map(status => ({ value: status.id, label: game.i18n.localize(status.name ?? status.label ?? status.id) }));
+  entries.sort((left, right) => left.label.localeCompare(right.label));
+  return entries;
+}
+
 const DEFAULT_STATE = () => ({
   // Entry mode (library entry editing)
   entryName: "New Template",
@@ -370,16 +378,24 @@ export class TemplatemacroGraphicsConfig extends HandlebarsApplicationMixin(Docu
       { value: "remove", label: "Remove" }
     ];
     const _filters = _listTargetFilterGroups();
+    const statusEffects = _listStatusEffects();
     const actionRows = (s.actions ?? []).map((a, i) => {
       const macroName = a.actionType === ACTION_TYPES.MACRO && a.macroUuid
         ? (fromUuidSync(a.macroUuid)?.name ?? a.macroUuid)
         : "";
+      const knownStatus = statusEffects.find(status => status.value === a.effectName);
+      const statusOptions = [{ value: "", label: "None", selected: !a.effectName }];
+      if (a.effectName && !knownStatus)
+        statusOptions.push({ value: a.effectName, label: `${a.effectName} (missing)`, selected: true });
+      for (const status of statusEffects)
+        statusOptions.push({ ...status, selected: status.value === a.effectName });
       const summary = a.actionType === ACTION_TYPES.CODE
         ? (a.code?.split("\n")[0]?.trim().slice(0, 60) || "(empty)")
         : a.actionType === ACTION_TYPES.MACRO
           ? (macroName || "(no macro)")
-          : (a.effectName || "(no effect)");
+          : (knownStatus?.label || a.effectName || "(no effect)");
       return {
+        statusOptions,
         index: i,
         ...a,
         icon: ACTION_ICON[a.actionType] ?? "fa-code",
@@ -1087,7 +1103,7 @@ export class TemplatemacroGraphicsConfig extends HandlebarsApplicationMixin(Docu
       };
     }
 
-    if (this.mode === MODES.TEMPLATE || this.mode === MODES.PLACEMENT) {
+    if (this.mode !== MODES.DEFAULTS) {
       for (let i = 0; i < (s.actions?.length ?? 0); i++) {
         const a = s.actions[i];
         a.trigger = str(fd[`action_${i}_trigger`], a.trigger);

@@ -415,9 +415,11 @@
                   </select>
                 </div>
                 <div class="form-group">
-                  <label>Effect Name or Status ID</label>
-                  <input type="text" name="action_{{index}}_effectName" value="{{effectName}}" placeholder="e.g. burning, slowed">
-                  <p class="hint">Status condition ID or active-effect name to apply or remove on the contained token.</p>
+                  <label>Status</label>
+                  <select name="action_{{index}}_effectName">
+                    {{#each statusOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+                  </select>
+                  <p class="hint">Status condition applied to or removed from the contained token.</p>
                 </div>
               {{/if}}
             </div>
