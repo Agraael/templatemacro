@@ -322,10 +322,17 @@ export function _preUpdateCombat(combat, update, context, userId)
         was
     };
 }
+let _lastTurnKey = null;
+
 export function _updateCombat(combat, update, context, userId)
 {
     if ((context.direction === -1) || !combat.isActive)
         return;
+    // any combat update lands here, so dedupe on the actual turn identity
+    const key = `${combat.id}:${combat.round}:${combat.turn}:${combat.current?.tokenId ?? ""}`;
+    if (key === _lastTurnKey)
+        return;
+    _lastTurnKey = key;
 
     const prev = context[MODULE]?.was ? canvas.scene.tokens.get(combat.previous?.tokenId) : null;
     const curr = canvas.scene.tokens.get(combat.current?.tokenId);

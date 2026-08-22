@@ -716,7 +716,6 @@ export class TemplateLibraryConfig extends HandlebarsApplicationMixin(Applicatio
       const id = ev.currentTarget.dataset.tmacSpawnSelect;
       const entry = getSpawnLibrary().find(e => e.id === id);
       if (!entry) return;
-      this.close();
       await spawnLibraryEntry(entry);
     });
 
