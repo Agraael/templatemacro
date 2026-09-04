@@ -30,7 +30,7 @@ export function cellOccludedByTerrain(worldX, worldY, baseElev, range)
             continue;
         const sBottom = s?.elevation ?? s?.bottom ?? s?.shape?.elevation ?? 0;
         const sTop = sBottom + (s?.height ?? s?.shape?.height ?? 0);
-        if (sTop > ceiling)
+        if (sTop >= ceiling)
             return true;
     }
     return false;

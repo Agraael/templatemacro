@@ -9,6 +9,7 @@
       <label>Icon</label>
       <input type="text" name="entryIcon" value="{{state.entryIcon}}" placeholder="fa-radiation or modules/.../icon.svg">
       <button type="button" class="tmac-entry-pick-icon" title="Browse"><i class="fa-solid fa-file-import"></i></button>
+      <button type="button" class="tmac-entry-copy-id" data-entry-id="{{entryId}}" title="Copy ID: {{entryId}}"><i class="fa-solid fa-passport"></i></button>
     </div>
   </div>
   {{/if}}
@@ -254,18 +255,33 @@
             </div>
           </div>
 
+          <div class="form-group tmac-row">
+            <label>Centered</label>
+            <input type="checkbox" name="fillTextureCentered" {{#if state.fillTextureCentered}}checked{{/if}}>
+            <label class="tmac-inline-label">Scale With Size</label>
+            <input type="checkbox" name="fillTextureScaleWithSize" {{#if state.fillTextureScaleWithSize}}checked{{/if}}>
+            <label class="tmac-inline-label" data-tooltip="Keep the texture's own colors instead of tinting it with the fill color.">Source Colors</label>
+            <input type="checkbox" name="fillTextureSourceColor" {{#if state.fillTextureSourceColor}}checked{{/if}}>
+            <label class="tmac-inline-label" data-tooltip="Draw the template over tokens instead of under them.">Above Tokens</label>
+            <input type="checkbox" name="aboveTokens" {{#if state.aboveTokens}}checked{{/if}}>
+          </div>
+
           {{#unless textureOffsetAnimationOn}}
             <div class="form-group">
               <label>Texture Offset <span class="units">(px)</span></label>
               <div class="form-fields">
                 <input type="number" name="fillTextureOffsetX" value="{{state.fillTextureOffset.x}}" step="1" placeholder="x">
                 <input type="number" name="fillTextureOffsetY" value="{{state.fillTextureOffset.y}}" step="1" placeholder="y">
-                <button type="button" class="tmac-anim-toggle" data-tmac-toggle-anim="offset" title="Animate offset">
-                  <i class="fa-solid fa-wand-magic-sparkles"></i>
-                </button>
+                {{#unless state.fillTextureCentered}}
+                  <button type="button" class="tmac-anim-toggle" data-tmac-toggle-anim="offset" title="Animate offset">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i>
+                  </button>
+                {{/unless}}
               </div>
             </div>
           {{/unless}}
+
+          {{#unless state.fillTextureCentered}}
 
           {{#if textureOffsetAnimationOn}}
             <fieldset class="tmac-anim-editor">
@@ -284,6 +300,7 @@
               </div>
             </fieldset>
           {{/if}}
+          {{/unless}}
         {{/if}}
       </section>
 

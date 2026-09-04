@@ -585,6 +585,9 @@ function _registerGraphicDefaults(zoneType) {
   reg("FillTextureOffset", Object, { x: 0, y: 0 });
   reg("FillTextureOffsetAnimation", Object, null);
   reg("FillTextureScale", Object, { x: 100, y: 100 });
+  reg("FillTextureCentered", Boolean, false);
+  reg("FillTextureScaleWithSize", Boolean, false);
+  reg("FillTextureSourceColor", Boolean, false);
   reg("CenterLabel", String, "");
   reg("Actions", Object, []);
 }
@@ -614,6 +617,9 @@ function _buildPlacementGraphicsState(zoneType) {
     fillTextureOffset: read("FillTextureOffset", { x: 0, y: 0 }),
     fillTextureOffsetAnimation: read("FillTextureOffsetAnimation", null),
     fillTextureScale: read("FillTextureScale", { x: 100, y: 100 }),
+    fillTextureCentered: read("FillTextureCentered", false),
+    fillTextureScaleWithSize: read("FillTextureScaleWithSize", false),
+    fillTextureSourceColor: read("FillTextureSourceColor", false),
     centerLabel: read("CenterLabel", ""),
     actions: read("Actions", [])
   };
