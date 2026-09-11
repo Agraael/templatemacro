@@ -931,8 +931,12 @@ function _fillLayerFor(template)
     if (template._tmacAbove && !template._tmacAbove.destroyed)
         return template._tmacAbove;
     const gfx = new PIXI.Graphics();
+    gfx.eventMode = "none";
+    gfx.interactiveChildren = false;
+    gfx.zIndex = -1;
     template._tmacAbove = gfx;
-    canvas.templates?.addChild(gfx);
+    // Behind the layer's objects container so control icons and ruler text stay visible and grabbable.
+    canvas.templates?.addChildAt(gfx, 0);
     template.once("destroyed", () => _destroyAboveGfx(template));
     return gfx;
 }
