@@ -268,6 +268,7 @@ export function applyEntryToTemplateData(doc, entry) {
     fillTextureCentered: !!g.fillTextureCentered,
     fillTextureScaleWithSize: !!g.fillTextureScaleWithSize,
     fillTextureSourceColor: !!g.fillTextureSourceColor,
+    aboveTokens: !!g.aboveTokens,
     centerLabel: g.centerLabel ?? "",
     actions: g.actions ?? entry.actions ?? [],
     libraryEntryId: entry.id,

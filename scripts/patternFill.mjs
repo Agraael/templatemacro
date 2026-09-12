@@ -730,9 +730,9 @@ function highlightGridWithPattern(template)
 
     highlightLayer.clear();
     highlightLayer.alpha = 1;
-    // keep our fill above the grid wireframe
+    // keep our fill above the grid wireframe; the above-tokens overlay must stay at index 0 of the template layer
     const parent = highlightLayer.parent;
-    if (parent && parent.children[parent.children.length - 1] !== highlightLayer)
+    if (highlightLayer !== template._tmacAbove && parent && parent.children[parent.children.length - 1] !== highlightLayer)
     {
         parent.removeChild(highlightLayer);
         parent.addChild(highlightLayer);
