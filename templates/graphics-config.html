@@ -310,6 +310,58 @@
           <textarea name="centerLabel" rows="2" placeholder="Text shown in the template center (Enter for line break)">{{state.centerLabel}}</textarea>
           <p class="hint">Leave empty for no label.</p>
         </div>
+
+        <fieldset>
+          <legend><i class="fa-solid fa-font"></i> Text</legend>
+          <div class="form-group">
+            <label>Font</label>
+            <div class="form-fields">
+              <select name="font">
+                {{#each fontOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Size <span class="units">(px)</span></label>
+            <div class="form-fields">
+              <input type="number" name="textSize" value="{{state.textSize}}" min="0" step="1" placeholder="{{defaultTextSize}}">
+            </div>
+            <p class="hint">Empty uses the world default ({{defaultTextSize}}).</p>
+          </div>
+          <div class="form-group">
+            <label>Color</label>
+            <div class="form-fields">
+              <color-picker name="textColor" value="{{state.textColor}}"></color-picker>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Opacity</label>
+            <range-picker name="textOpacity" value="{{state.textOpacity}}" min="0" max="1" step="0.05"></range-picker>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend><i class="fa-solid fa-border-none"></i> Outline &amp; Shadow</legend>
+          <div class="form-group">
+            <label>Stroke <span class="units">(px)</span></label>
+            <div class="form-fields">
+              <input type="number" name="textStrokeThickness" value="{{state.textStrokeThickness}}" min="0" step="1">
+              <color-picker name="textStrokeColor" value="{{state.textStrokeColor}}"></color-picker>
+            </div>
+            <p class="hint">Empty color picks black or white against the text color.</p>
+          </div>
+          <div class="form-group">
+            <label>Shadow <span class="units">(blur)</span></label>
+            <div class="form-fields">
+              <input type="number" name="textShadowAmount" value="{{state.textShadowAmount}}" min="0" step="1">
+              <color-picker name="textShadowColor" value="{{state.textShadowColor}}"></color-picker>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Shadow Opacity</label>
+            <range-picker name="textShadowOpacity" value="{{state.textShadowOpacity}}" min="0" max="1" step="0.05"></range-picker>
+          </div>
+        </fieldset>
       </section>
 
       <section data-tmac-pane="misc">
@@ -457,6 +509,9 @@
   </div>
 
   <footer class="tmac-footer">
+    {{#if hasTerrainHeightTools}}
+    <button type="button" class="tmac-sheet-tht-style" title="Copy the style of a Terrain Height Tools terrain type"><i class="fa-solid fa-mountain"></i> From THT</button>
+    {{/if}}
     {{#if isTemplateMode}}
     <button type="button" class="tmac-sheet-save-preset" title="Save this template's style+macros as a library preset"><i class="fa-solid fa-bookmark"></i> Save as Preset</button>
     <button type="button" class="tmac-sheet-save-spawn" title="Save this template as a spawnable library template"><i class="fa-solid fa-shapes"></i> Save as Template</button>

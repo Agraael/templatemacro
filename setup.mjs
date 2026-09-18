@@ -463,12 +463,25 @@ function _registerLancerSettings() {
   });
 
   game.settings.register(MODULE, "centerLabelSize", {
-    name: "Center Label Font Size",
+    name: "Default Center Label Font Size",
     hint: "Font size (in pixels) of the text shown at the center of placement zones.",
     scope: "world",
     config: true,
     type: Number,
     default: 12
+  });
+
+  game.settings.register(MODULE, "scaleVisualsToGrid", {
+    name: "Scale zone visuals to the grid",
+    hint: "Treats line width, dash size, center label size, texture scale and offset as values on a grid of 100.",
+    scope: "world",
+    config: true,
+    type: Boolean,
+    default: false,
+    onChange: () => {
+      for (const template of canvas.templates?.placeables ?? [])
+        template.refresh();
+    }
   });
 
   game.settings.register(MODULE, "thtAutoElevation", {

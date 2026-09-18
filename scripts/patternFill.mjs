@@ -200,6 +200,26 @@ export function refreshCenterLabel(template)
     return _refreshCenterLabel(template);
 }
 
+export function getCenterLabelStyle(templateDoc)
+{
+    const flag = (key, fallback) => templateDoc.getFlag(MODULE, key) ?? fallback;
+    const gridScale = visualGridScale();
+    const size = flag("textSize", null) ?? game.settings.get(MODULE, "centerLabelSize") ?? 12;
+    const color = flag("textColor", "#ffffff");
+    const autoContrast = Color.from(color).hsv[2] > 0.6 ? "#000000" : "#ffffff";
+    return {
+        fontFamily: flag("font", "") || "Arial",
+        fontSize: size * gridScale,
+        fill: color,
+        alpha: flag("textOpacity", 1),
+        strokeThickness: flag("textStrokeThickness", 4) * gridScale,
+        stroke: flag("textStrokeColor", "") || autoContrast,
+        shadowAmount: flag("textShadowAmount", 0) * gridScale,
+        shadowColor: flag("textShadowColor", "") || autoContrast,
+        shadowOpacity: flag("textShadowOpacity", 1)
+    };
+}
+
 function _refreshCenterLabel(template)
 {
     const ownLabel = template.document.getFlag(MODULE, "centerLabel") ?? "";
@@ -217,7 +237,7 @@ function _refreshCenterLabel(template)
       : 0;
     const heightSuffix = (baseLabel && gated && heightVal > 0) ? ` ↕${heightVal}` : "";
     const label = baseLabel ? `${baseLabel}${elevSuffix}${heightSuffix}` : "";
-    const labelSize = game.settings.get(MODULE, "centerLabelSize") ?? 12;
+    const labelStyleConfig = getCenterLabelStyle(template.document);
 
     if (!label)
     {
@@ -234,14 +254,14 @@ function _refreshCenterLabel(template)
     if (!template._tmCenterLabel)
     {
         const style = new PIXI.TextStyle({
-            fontFamily: "Arial",
-            fontSize: labelSize,
+            fontFamily: labelStyleConfig.fontFamily,
+            fontSize: labelStyleConfig.fontSize,
             fontWeight: "bold",
-            fill: "#ffffff",
-            stroke: "#000000",
-            strokeThickness: 4,
+            fill: labelStyleConfig.fill,
+            stroke: labelStyleConfig.stroke,
+            strokeThickness: labelStyleConfig.strokeThickness,
             align: "center",
-            dropShadow: false
+            dropShadow: labelStyleConfig.shadowAmount > 0
         });
         template._tmCenterLabel = new PreciseText("", style);
         template._tmCenterLabel.anchor.set(0.5, 0.5);
@@ -265,7 +285,16 @@ function _refreshCenterLabel(template)
         });
     }
 
-    template._tmCenterLabel.style.fontSize = labelSize;
+    template._tmCenterLabel.style.fontFamily = labelStyleConfig.fontFamily;
+    template._tmCenterLabel.style.fontSize = labelStyleConfig.fontSize;
+    template._tmCenterLabel.style.fill = labelStyleConfig.fill;
+    template._tmCenterLabel.style.stroke = labelStyleConfig.stroke;
+    template._tmCenterLabel.style.strokeThickness = labelStyleConfig.strokeThickness;
+    template._tmCenterLabel.style.dropShadow = labelStyleConfig.shadowAmount > 0;
+    template._tmCenterLabel.style.dropShadowBlur = labelStyleConfig.shadowAmount;
+    template._tmCenterLabel.style.dropShadowColor = labelStyleConfig.shadowColor;
+    template._tmCenterLabel.style.dropShadowAlpha = labelStyleConfig.shadowOpacity;
+    template._tmCenterLabel.alpha = labelStyleConfig.alpha;
     template._tmCenterLabel.text = label;
     const iso = _isoLabelSkew();
     template._tmCenterLabel.rotation = 0;
@@ -422,16 +451,25 @@ export function shouldUseCustomRender(templateDoc)
     || !!c.fillPulse;
 }
 
+export function visualGridScale()
+{
+    return game.settings.get(MODULE, "scaleVisualsToGrid")
+        ? canvas.grid.size / 100
+        : 1;
+}
+
 export function getPatternFillConfig(templateDoc)
 {
     const flag = (k, fb) => templateDoc.getFlag(MODULE, k) ?? fb;
     const legacyFillSize = templateDoc.getFlag(MODULE, "fillSize");
     const fallbackScale = legacyFillSize != null ? { x: legacyFillSize * 100, y: legacyFillSize * 100 } : { x: 100, y: 100 };
+    const gridScale = visualGridScale();
+    const scalePoint = (point) => point && { x: (point.x ?? 0) * gridScale, y: (point.y ?? 0) * gridScale };
     return {
         fillType: flag("fillType", FILL_TYPES.SOLID),
         fillTexture: flag("fillTexture", DEFAULT_PATTERN_TEXTURE),
-        fillTextureScale: flag("fillTextureScale", fallbackScale),
-        fillTextureOffset: flag("fillTextureOffset", { x: 0, y: 0 }),
+        fillTextureScale: scalePoint(flag("fillTextureScale", fallbackScale)),
+        fillTextureOffset: scalePoint(flag("fillTextureOffset", { x: 0, y: 0 })),
         fillTextureOffsetAnimation: flag("fillTextureOffsetAnimation", null),
         fillTextureCentered: !!flag("fillTextureCentered", false),
         fillTextureScaleWithSize: !!flag("fillTextureScaleWithSize", false),
@@ -441,11 +479,11 @@ export function getPatternFillConfig(templateDoc)
         fillColorAnimation: flag("fillColorAnimation", null),
         borderOpacity: flag("borderOpacity", 0.5),
         lineType: flag("lineType", LINE_TYPES.SOLID),
-        lineWidth: flag("lineWidth", 2),
+        lineWidth: flag("lineWidth", 2) * gridScale,
         lineColor: flag("lineColor", templateDoc.borderColor ?? "#000000"),
         lineOpacity: flag("lineOpacity", flag("borderOpacity", 0.5)),
-        lineDashSize: flag("lineDashSize", 15),
-        lineGapSize: flag("lineGapSize", 10),
+        lineDashSize: flag("lineDashSize", 15) * gridScale,
+        lineGapSize: flag("lineGapSize", 10) * gridScale,
         lineDashOffsetAnimation: flag("lineDashOffsetAnimation", 0),
         lineColorAnimation: flag("lineColorAnimation", null),
         radiusOffset: flag("radiusOffset", 0),

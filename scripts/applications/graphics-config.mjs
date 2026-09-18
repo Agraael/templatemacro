@@ -155,6 +155,15 @@ const DEFAULT_STATE = () => ({
   fillTextureSourceColor: false,
   // Label
   centerLabel: "",
+  font: "",
+  textSize: null,
+  textColor: "#ffffff",
+  textOpacity: 1,
+  textStrokeThickness: 4,
+  textStrokeColor: "#000000",
+  textShadowAmount: 0,
+  textShadowColor: "#000000",
+  textShadowOpacity: 1,
   // Difficult terrain (read by lancer-automations movement cost)
   movementPenalty: 0,
   flatMovementPenalty: true,
@@ -230,6 +239,15 @@ function readTemplateDoc(doc) {
   state.fillTextureScaleWithSize = !!flag("fillTextureScaleWithSize", false);
   state.fillTextureSourceColor = !!flag("fillTextureSourceColor", false);
   state.centerLabel = flag("centerLabel", "");
+  state.font = flag("font", "");
+  state.textSize = flag("textSize", null);
+  state.textColor = flag("textColor", "#ffffff");
+  state.textOpacity = flag("textOpacity", 1);
+  state.textStrokeThickness = flag("textStrokeThickness", 4);
+  state.textStrokeColor = flag("textStrokeColor", "#000000");
+  state.textShadowAmount = flag("textShadowAmount", 0);
+  state.textShadowColor = flag("textShadowColor", "#000000");
+  state.textShadowOpacity = flag("textShadowOpacity", 1);
   state.movementPenalty = flag("movementPenalty", 0);
   state.flatMovementPenalty = flag("flatMovementPenalty", true);
   state.elevationGated = !!flag("elevationGated", false);
@@ -431,6 +449,16 @@ export class TemplatemacroGraphicsConfig extends HandlebarsApplicationMixin(Docu
       showEntryHeader,
       entryId,
       isTemplateMode: this.mode === MODES.TEMPLATE,
+      hasTerrainHeightTools: !!game.modules.get("terrain-height-tools")?.active,
+      defaultTextSize: game.settings.get(MODULE, "centerLabelSize") ?? 12,
+      fontOptions: [
+        { value: "", label: "Default", selected: !s.font },
+        ...Object.keys(CONFIG.fontDefinitions ?? {}).sort().map(family => ({
+          value: family,
+          label: family,
+          selected: s.font === family
+        }))
+      ],
       hasMovementRuler: !!game.modules.get("lancer-automations")?.active,
       hasLancerAutomations: !!game.modules.get("lancer-automations")?.active,
       hasTokenMagic,
@@ -630,6 +658,11 @@ export class TemplatemacroGraphicsConfig extends HandlebarsApplicationMixin(Docu
     this._mountAnimPreview(html, "fill");
     this._startAnimTracker(html);
 
+    html.find(".tmac-sheet-tht-style").on("click", (ev) => {
+      ev.preventDefault();
+      this._applyTerrainTypeStyle();
+    });
+
     if (this.mode === MODES.TEMPLATE) {
       html.on("change", "input, select, color-picker, range-picker, textarea", () => this._scheduleLiveApply({ snapshot: true }));
       html.find(".tmac-sheet-export").on("click", (ev) => {
@@ -651,6 +684,65 @@ export class TemplatemacroGraphicsConfig extends HandlebarsApplicationMixin(Docu
     }
   }
 
+  async _applyTerrainTypeStyle() {
+    const types = globalThis.terrainHeightTools?.getTerrainTypes?.() ?? [];
+    if (!types.length) {
+      ui.notifications?.warn("No Terrain Height Tools terrain types are configured.");
+      return;
+    }
+    const options = types
+      .map(entry => `<option value="${entry.id}">${foundry.utils.escapeHTML(entry.name ?? entry.id)}</option>`)
+      .join("");
+    const chosenId = await new Promise((resolve) => {
+      new Dialog({
+        title: "Copy Terrain Style",
+        content: `<form><div class="form-group"><label>Terrain Type</label><select name="terrainType">${options}</select></div></form>`,
+        buttons: {
+          apply: { icon: '<i class="fa-solid fa-check"></i>', label: "Apply", callback: (html) => resolve(html.find('[name="terrainType"]').val()) },
+          cancel: { icon: '<i class="fa-solid fa-xmark"></i>', label: "Cancel", callback: () => resolve(null) }
+        },
+        default: "apply",
+        close: () => resolve(null)
+      }).render(true);
+    });
+    if (!chosenId) return;
+    const terrain = types.find(entry => entry.id === chosenId);
+    if (!terrain) return;
+
+    const state = this._formState;
+    const copyPoint = (point, fallback) => point ? { x: point.x ?? 0, y: point.y ?? 0 } : fallback;
+    state.lineType = terrain.lineType ?? state.lineType;
+    state.lineWidth = terrain.lineWidth ?? state.lineWidth;
+    state.lineColor = terrain.lineColor ?? state.lineColor;
+    state.lineOpacity = terrain.lineOpacity ?? state.lineOpacity;
+    state.lineDashSize = terrain.lineDashSize ?? state.lineDashSize;
+    state.lineGapSize = terrain.lineGapSize ?? state.lineGapSize;
+    state.lineColorAnimation = terrain.lineColorAnimation ? foundry.utils.deepClone(terrain.lineColorAnimation) : null;
+    state.fillType = terrain.fillType ?? state.fillType;
+    state.fillColor = terrain.fillColor ?? state.fillColor;
+    state.fillOpacity = terrain.fillOpacity ?? state.fillOpacity;
+    state.fillColorAnimation = terrain.fillColorAnimation ? foundry.utils.deepClone(terrain.fillColorAnimation) : null;
+    state.fillTexture = terrain.fillTexture || state.fillTexture;
+    state.fillTextureScale = copyPoint(terrain.fillTextureScale, state.fillTextureScale);
+    state.fillTextureOffset = copyPoint(terrain.fillTextureOffset, state.fillTextureOffset);
+    state.fillTextureOffsetAnimation = copyPoint(terrain.fillTextureOffsetAnimation, null);
+    state.font = terrain.font ?? state.font;
+    state.textSize = terrain.textSize ?? state.textSize;
+    state.textColor = terrain.textColor ?? state.textColor;
+    state.textOpacity = terrain.textOpacity ?? state.textOpacity;
+    state.textStrokeThickness = terrain.textStrokeThickness ?? state.textStrokeThickness;
+    state.textStrokeColor = terrain.textStrokeColor ?? state.textStrokeColor;
+    state.textShadowAmount = terrain.textShadowAmount ?? state.textShadowAmount;
+    state.textShadowColor = terrain.textShadowColor ?? state.textShadowColor;
+    state.textShadowOpacity = terrain.textShadowOpacity ?? state.textShadowOpacity;
+    state.useCustomRender = true;
+
+    this.render();
+    if (this.mode === MODES.TEMPLATE)
+      this._scheduleLiveApply({ snapshot: true });
+    ui.notifications?.info(`Copied the style of "${terrain.name ?? terrain.id}".`);
+  }
+
   _buildEntryFromSheet() {
     const s = this._formState;
     const KEYS = [
@@ -660,7 +752,9 @@ export class TemplatemacroGraphicsConfig extends HandlebarsApplicationMixin(Docu
       "fillType", "fillColor", "fillOpacity", "fillColorAnimation",
       "fillTexture", "fillTextureOffset", "fillTextureOffsetAnimation", "fillTextureScale",
       "fillTextureCentered", "fillTextureScaleWithSize", "fillTextureSourceColor", "aboveTokens",
-      "centerLabel", "movementPenalty", "flatMovementPenalty", "elevationGated", "elevationRangeManual", "elevationRange", "innerRadius", "actions"
+      "centerLabel", "font", "textSize", "textColor", "textOpacity",
+      "textStrokeThickness", "textStrokeColor", "textShadowAmount", "textShadowColor", "textShadowOpacity",
+      "movementPenalty", "flatMovementPenalty", "elevationGated", "elevationRangeManual", "elevationRange", "innerRadius", "actions"
     ];
     const graphicsState = {};
     for (const k of KEYS) graphicsState[k] = s[k];
@@ -1108,6 +1202,17 @@ export class TemplatemacroGraphicsConfig extends HandlebarsApplicationMixin(Docu
     s.fillTextureScaleWithSize = !!fd.fillTextureScaleWithSize;
     s.fillTextureSourceColor = !!fd.fillTextureSourceColor;
     s.centerLabel = str(fd.centerLabel, s.centerLabel);
+    s.font = str(fd.font, s.font);
+    s.textSize = (fd.textSize === "" || fd.textSize === null || fd.textSize === undefined)
+      ? null
+      : num(fd.textSize, s.textSize);
+    s.textColor = str(fd.textColor, s.textColor);
+    s.textOpacity = num(fd.textOpacity, s.textOpacity);
+    s.textStrokeThickness = num(fd.textStrokeThickness, s.textStrokeThickness);
+    s.textStrokeColor = str(fd.textStrokeColor, s.textStrokeColor);
+    s.textShadowAmount = num(fd.textShadowAmount, s.textShadowAmount);
+    s.textShadowColor = str(fd.textShadowColor, s.textShadowColor);
+    s.textShadowOpacity = num(fd.textShadowOpacity, s.textShadowOpacity);
     s.movementPenalty = num(fd.movementPenalty, s.movementPenalty);
     s.flatMovementPenalty = !!fd.flatMovementPenalty;
     if (fd.elevationGated !== undefined) s.elevationGated = !!fd.elevationGated;
@@ -1183,7 +1288,9 @@ export class TemplatemacroGraphicsConfig extends HandlebarsApplicationMixin(Docu
       "fillType", "fillColor", "fillOpacity", "fillColorAnimation",
       "fillTexture", "fillTextureOffset", "fillTextureOffsetAnimation", "fillTextureScale",
       "fillTextureCentered", "fillTextureScaleWithSize", "fillTextureSourceColor", "aboveTokens",
-      "centerLabel", "movementPenalty", "flatMovementPenalty", "elevationGated", "elevationRangeManual", "elevationRange", "innerRadius", "actions"
+      "centerLabel", "font", "textSize", "textColor", "textOpacity",
+      "textStrokeThickness", "textStrokeColor", "textShadowAmount", "textShadowColor", "textShadowOpacity",
+      "movementPenalty", "flatMovementPenalty", "elevationGated", "elevationRangeManual", "elevationRange", "innerRadius", "actions"
     ];
     for (const k of GRAPHICS_KEYS) this.target.graphicsState[k] = s[k];
     this.onSubmit?.(this.target);
@@ -1236,6 +1343,15 @@ export class TemplatemacroGraphicsConfig extends HandlebarsApplicationMixin(Docu
       fillTextureSourceColor: s.fillTextureSourceColor,
       aboveTokens: s.aboveTokens,
       centerLabel: s.centerLabel,
+      font: s.font,
+      textSize: s.textSize,
+      textColor: s.textColor,
+      textOpacity: s.textOpacity,
+      textStrokeThickness: s.textStrokeThickness,
+      textStrokeColor: s.textStrokeColor,
+      textShadowAmount: s.textShadowAmount,
+      textShadowColor: s.textShadowColor,
+      textShadowOpacity: s.textShadowOpacity,
       schemaVersion: 2
     };
     const update = { ...nativeUpdates };
