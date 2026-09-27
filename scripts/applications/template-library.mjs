@@ -63,6 +63,8 @@ function _defaultGraphics() {
     fillTextureOffset: { x: 0, y: 0 },
     fillTextureOffsetAnimation: null,
     fillTextureScale: { x: 100, y: 100 },
+    fillTextureRotation: 0,
+    fillTextureRotateWithTemplate: false,
     centerLabel: "",
     movementPenalty: 0,
     flatMovementPenalty: true,
@@ -99,6 +101,8 @@ function _readDefaultGraphicsForZone(zoneType) {
     fillTextureOffset: read("FillTextureOffset", { x: 0, y: 0 }),
     fillTextureOffsetAnimation: read("FillTextureOffsetAnimation", null),
     fillTextureScale: read("FillTextureScale", { x: 100, y: 100 }),
+    fillTextureRotation: read("FillTextureRotation", 0),
+    fillTextureRotateWithTemplate: read("FillTextureRotateWithTemplate", false),
     centerLabel: "",
     movementPenalty: 0,
     flatMovementPenalty: true,
@@ -205,6 +209,7 @@ export async function seedLibraryIfEmpty() {
   difficult.graphicsState.movementPenalty = 1;
   difficult.graphicsState.flatMovementPenalty = true;
   difficult.graphicsState.centerLabel = "Difficult\nZone";
+  difficult.graphicsState.laLineOfSight = false;
 
   const lib = getLibrary();
 
@@ -265,6 +270,8 @@ export function applyEntryToTemplateData(doc, entry) {
     fillTextureOffset: g.fillTextureOffset ?? { x: 0, y: 0 },
     fillTextureOffsetAnimation: g.fillTextureOffsetAnimation ?? null,
     fillTextureScale: g.fillTextureScale ?? { x: 100, y: 100 },
+    fillTextureRotation: g.fillTextureRotation ?? 0,
+    fillTextureRotateWithTemplate: !!g.fillTextureRotateWithTemplate,
     fillTextureCentered: !!g.fillTextureCentered,
     fillTextureScaleWithSize: !!g.fillTextureScaleWithSize,
     fillTextureSourceColor: !!g.fillTextureSourceColor,
@@ -291,6 +298,7 @@ export function applyEntryToTemplateData(doc, entry) {
   }
   if ((g.innerRadius ?? 0) > 0) update.flags[MODULE].innerRadius = g.innerRadius;
   else update.flags[MODULE]["-=innerRadius"] = null;
+  update.flags[MODULE].laLineOfSight = g.laLineOfSight !== false;
 
   if (entry.protected && entry.protectedKind) {
     const overrides = getActiveOverrides() ?? {};

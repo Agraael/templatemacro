@@ -149,6 +149,8 @@ const DEFAULT_STATE = () => ({
   fillTextureOffset: { x: 0, y: 0 },
   fillTextureOffsetAnimation: null,
   fillTextureScale: { x: 100, y: 100 },
+  fillTextureRotation: 0,
+  fillTextureRotateWithTemplate: false,
   fillTextureCentered: false,
   aboveTokens: false,
   fillTextureScaleWithSize: false,
@@ -171,6 +173,7 @@ const DEFAULT_STATE = () => ({
   elevationRangeManual: false,
   elevationRange: 0,
   innerRadius: 0,
+  laLineOfSight: true,
   // Actions (template mode only)
   actions: []
 });
@@ -234,6 +237,8 @@ function readTemplateDoc(doc) {
   state.fillTextureOffset = flag("fillTextureOffset", { x: 0, y: 0 });
   state.fillTextureOffsetAnimation = flag("fillTextureOffsetAnimation", null);
   state.fillTextureScale = flag("fillTextureScale", { x: 100, y: 100 });
+  state.fillTextureRotation = flag("fillTextureRotation", 0);
+  state.fillTextureRotateWithTemplate = !!flag("fillTextureRotateWithTemplate", false);
   state.fillTextureCentered = !!flag("fillTextureCentered", false);
   state.aboveTokens = !!flag("aboveTokens", false);
   state.fillTextureScaleWithSize = !!flag("fillTextureScaleWithSize", false);
@@ -254,6 +259,7 @@ function readTemplateDoc(doc) {
   state.elevationRangeManual = !!flag("elevationRangeManual", false);
   state.elevationRange = flag("elevationRange", 0);
   state.innerRadius = flag("innerRadius", 0);
+  state.laLineOfSight = !!flag("laLineOfSight", false);
 
   const storedActions = flag("actions", null);
   if (Array.isArray(storedActions) && storedActions.length) {
@@ -750,11 +756,11 @@ export class TemplatemacroGraphicsConfig extends HandlebarsApplicationMixin(Docu
       "lineType", "lineWidth", "lineColor", "lineOpacity",
       "lineDashSize", "lineGapSize", "lineDashOffsetAnimation", "lineColorAnimation",
       "fillType", "fillColor", "fillOpacity", "fillColorAnimation",
-      "fillTexture", "fillTextureOffset", "fillTextureOffsetAnimation", "fillTextureScale",
+      "fillTexture", "fillTextureOffset", "fillTextureOffsetAnimation", "fillTextureScale", "fillTextureRotation", "fillTextureRotateWithTemplate",
       "fillTextureCentered", "fillTextureScaleWithSize", "fillTextureSourceColor", "aboveTokens",
       "centerLabel", "font", "textSize", "textColor", "textOpacity",
       "textStrokeThickness", "textStrokeColor", "textShadowAmount", "textShadowColor", "textShadowOpacity",
-      "movementPenalty", "flatMovementPenalty", "elevationGated", "elevationRangeManual", "elevationRange", "innerRadius", "actions"
+      "movementPenalty", "flatMovementPenalty", "elevationGated", "elevationRangeManual", "elevationRange", "innerRadius", "laLineOfSight", "actions"
     ];
     const graphicsState = {};
     for (const k of KEYS) graphicsState[k] = s[k];
@@ -1197,6 +1203,8 @@ export class TemplatemacroGraphicsConfig extends HandlebarsApplicationMixin(Docu
       x: num(fd.fillTextureScaleX, s.fillTextureScale.x),
       y: num(fd.fillTextureScaleY, s.fillTextureScale.y)
     };
+    s.fillTextureRotation = num(fd.fillTextureRotation, s.fillTextureRotation);
+    s.fillTextureRotateWithTemplate = !!fd.fillTextureRotateWithTemplate;
     s.fillTextureCentered = !!fd.fillTextureCentered;
     s.aboveTokens = !!fd.aboveTokens;
     s.fillTextureScaleWithSize = !!fd.fillTextureScaleWithSize;
@@ -1219,6 +1227,7 @@ export class TemplatemacroGraphicsConfig extends HandlebarsApplicationMixin(Docu
     if (fd.elevationRangeManual !== undefined) s.elevationRangeManual = !!fd.elevationRangeManual;
     s.elevationRange = num(fd.elevationRange, s.elevationRange);
     s.innerRadius = num(fd.innerRadius, s.innerRadius);
+    if (fd.laLineOfSight !== undefined) s.laLineOfSight = !!fd.laLineOfSight;
 
     if (s.lineColorAnimation) {
       s.lineColorAnimation.duration = num(fd.lineColorAnimationDuration, s.lineColorAnimation.duration);
@@ -1286,11 +1295,11 @@ export class TemplatemacroGraphicsConfig extends HandlebarsApplicationMixin(Docu
       "lineType", "lineWidth", "lineColor", "lineOpacity",
       "lineDashSize", "lineGapSize", "lineDashOffsetAnimation", "lineColorAnimation",
       "fillType", "fillColor", "fillOpacity", "fillColorAnimation",
-      "fillTexture", "fillTextureOffset", "fillTextureOffsetAnimation", "fillTextureScale",
+      "fillTexture", "fillTextureOffset", "fillTextureOffsetAnimation", "fillTextureScale", "fillTextureRotation", "fillTextureRotateWithTemplate",
       "fillTextureCentered", "fillTextureScaleWithSize", "fillTextureSourceColor", "aboveTokens",
       "centerLabel", "font", "textSize", "textColor", "textOpacity",
       "textStrokeThickness", "textStrokeColor", "textShadowAmount", "textShadowColor", "textShadowOpacity",
-      "movementPenalty", "flatMovementPenalty", "elevationGated", "elevationRangeManual", "elevationRange", "innerRadius", "actions"
+      "movementPenalty", "flatMovementPenalty", "elevationGated", "elevationRangeManual", "elevationRange", "innerRadius", "laLineOfSight", "actions"
     ];
     for (const k of GRAPHICS_KEYS) this.target.graphicsState[k] = s[k];
     this.onSubmit?.(this.target);
@@ -1338,6 +1347,8 @@ export class TemplatemacroGraphicsConfig extends HandlebarsApplicationMixin(Docu
       fillTextureOffset: s.fillTextureOffset,
       fillTextureOffsetAnimation: s.fillTextureOffsetAnimation,
       fillTextureScale: s.fillTextureScale,
+      fillTextureRotation: s.fillTextureRotation,
+      fillTextureRotateWithTemplate: s.fillTextureRotateWithTemplate,
       fillTextureCentered: s.fillTextureCentered,
       fillTextureScaleWithSize: s.fillTextureScaleWithSize,
       fillTextureSourceColor: s.fillTextureSourceColor,
@@ -1373,6 +1384,7 @@ export class TemplatemacroGraphicsConfig extends HandlebarsApplicationMixin(Docu
     }
     if ((s.innerRadius ?? 0) > 0) update[`flags.${MODULE}.innerRadius`] = s.innerRadius;
     else update[`flags.${MODULE}.-=innerRadius`] = null;
+    update[`flags.${MODULE}.laLineOfSight`] = s.laLineOfSight !== false;
     // drop legacy per-trigger commands so they don't double-fire alongside the actions list
     for (const trig of TRIGGERS) {
       if (trig === "never") continue;

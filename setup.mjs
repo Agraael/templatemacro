@@ -598,6 +598,8 @@ function _registerGraphicDefaults(zoneType) {
   reg("FillTextureOffset", Object, { x: 0, y: 0 });
   reg("FillTextureOffsetAnimation", Object, null);
   reg("FillTextureScale", Object, { x: 100, y: 100 });
+  reg("FillTextureRotation", Number, 0);
+  reg("FillTextureRotateWithTemplate", Boolean, false);
   reg("FillTextureCentered", Boolean, false);
   reg("FillTextureScaleWithSize", Boolean, false);
   reg("FillTextureSourceColor", Boolean, false);
@@ -630,6 +632,8 @@ function _buildPlacementGraphicsState(zoneType) {
     fillTextureOffset: read("FillTextureOffset", { x: 0, y: 0 }),
     fillTextureOffsetAnimation: read("FillTextureOffsetAnimation", null),
     fillTextureScale: read("FillTextureScale", { x: 100, y: 100 }),
+    fillTextureRotation: read("FillTextureRotation", 0),
+    fillTextureRotateWithTemplate: read("FillTextureRotateWithTemplate", false),
     fillTextureCentered: read("FillTextureCentered", false),
     fillTextureScaleWithSize: read("FillTextureScaleWithSize", false),
     fillTextureSourceColor: read("FillTextureSourceColor", false),

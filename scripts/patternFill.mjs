@@ -156,17 +156,24 @@ export const FILL_TYPES = { NONE: 0, SOLID: 1, PATTERN: 2 };
 const textureCache = new Map();
 const animationState = new Map();
 
-// Labels sit on canvas.interface.grid so they render above fills, below the TemplateLayer.
+// Labels sit under the TemplateLayer objects container: above both fill targets, below control icons.
 
 const centerLabelObjects = new Map();
 let _tmLabelLayer = null;
 
 function _ensureLabelLayer()
 {
-    if (_tmLabelLayer && !_tmLabelLayer.destroyed && _tmLabelLayer.parent)
-        return _tmLabelLayer;
-    _tmLabelLayer = new PIXI.Container();
-    canvas.interface.grid.addChild(_tmLabelLayer);
+    const parent = canvas.templates ?? canvas.interface.grid;
+    if (!_tmLabelLayer || _tmLabelLayer.destroyed)
+    {
+        _tmLabelLayer = new PIXI.Container();
+        _tmLabelLayer.eventMode = "none";
+    }
+    const objects = parent.objects;
+    const seat = objects?.parent === parent ? parent.getChildIndex(objects) : parent.children.length;
+    const at = _tmLabelLayer.parent === parent ? parent.getChildIndex(_tmLabelLayer) : -1;
+    if (at < 0 || at > seat)
+        parent.addChildAt(_tmLabelLayer, seat);
     return _tmLabelLayer;
 }
 
@@ -469,6 +476,9 @@ export function getPatternFillConfig(templateDoc)
         fillType: flag("fillType", FILL_TYPES.SOLID),
         fillTexture: flag("fillTexture", DEFAULT_PATTERN_TEXTURE),
         fillTextureScale: scalePoint(flag("fillTextureScale", fallbackScale)),
+        fillTextureRotation: (Number(flag("fillTextureRotation", 0)) || 0)
+            + (flag("fillTextureRotateWithTemplate", false) ? (templateDoc.direction ?? 0) : 0),
+        fillTextureRotateWithTemplate: !!flag("fillTextureRotateWithTemplate", false),
         fillTextureOffset: scalePoint(flag("fillTextureOffset", { x: 0, y: 0 })),
         fillTextureOffsetAnimation: flag("fillTextureOffsetAnimation", null),
         fillTextureCentered: !!flag("fillTextureCentered", false),
@@ -819,7 +829,10 @@ function highlightGridWithPattern(template)
     const finalOffsetX = (config.fillTextureOffset?.x ?? 0) + animOffset.x;
     const finalOffsetY = (config.fillTextureOffset?.y ?? 0) + animOffset.y;
     const fillOpacity = config.fillPulse ? getPulsedFillOpacity(template.id, fillAlpha) : fillAlpha;
-    const fillMatrix = new PIXI.Matrix(scaleX / 100, 0, 0, scaleY / 100, finalOffsetX, finalOffsetY);
+    const fillMatrix = new PIXI.Matrix()
+        .scale(scaleX / 100, scaleY / 100)
+        .rotate(Math.toRadians(config.fillTextureRotation))
+        .translate(finalOffsetX, finalOffsetY);
 
     if (canvas.grid.type === CONST.GRID_TYPES.GRIDLESS)
     {
@@ -1050,6 +1063,7 @@ function _drawCenteredTexture(template, texture, config, shapes, tint, alpha)
     const sizeFactor = config.fillTextureScaleWithSize ? Math.max(1, Number(template.document.distance) || 1) : 1;
     sprite.width = texture.width * (config.fillTextureScale.x / 100) * sizeFactor;
     sprite.height = texture.height * (config.fillTextureScale.y / 100) * sizeFactor;
+    sprite.rotation = Math.toRadians(config.fillTextureRotation);
     sprite.position.set(
         bounds.x + (bounds.width / 2) + (config.fillTextureOffset?.x ?? 0),
         bounds.y + (bounds.height / 2) + (config.fillTextureOffset?.y ?? 0)

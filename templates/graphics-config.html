@@ -255,6 +255,15 @@
             </div>
           </div>
 
+          <div class="form-group">
+            <label>Texture Rotation <span class="units">(°)</span></label>
+            <div class="form-fields">
+              <input type="number" name="fillTextureRotation" value="{{state.fillTextureRotation}}" step="5">
+              <label class="tmac-inline-label" data-tooltip="Add the template's direction to the pattern rotation.">With Template</label>
+              <input type="checkbox" name="fillTextureRotateWithTemplate" {{#if state.fillTextureRotateWithTemplate}}checked{{/if}}>
+            </div>
+          </div>
+
           <div class="form-group tmac-row">
             <label>Centered</label>
             <input type="checkbox" name="fillTextureCentered" {{#if state.fillTextureCentered}}checked{{/if}}>
@@ -411,6 +420,16 @@
             <label>Flat</label>
             <input type="checkbox" name="flatMovementPenalty" {{#if state.flatMovementPenalty}}checked{{/if}} {{#unless hasLancerAutomations}}disabled{{/unless}}>
             <p class="hint">On: flat gu per hex. Off: multiplier on cost. Requires the Lancer Automations module.</p>
+          </div>
+        </fieldset>
+        {{/if}}
+        {{#if hasLancerAutomations}}
+        <fieldset>
+          <legend><i class="fa-solid fa-eye"></i> Line of Sight (Lancer Automations)</legend>
+          <div class="form-group">
+            <label>Interacts with LA line of sight</label>
+            <input type="checkbox" name="laLineOfSight" {{#if state.laLineOfSight}}checked{{/if}}>
+            <p class="hint">Off: the line-of-sight ruler ignores this template.</p>
           </div>
         </fieldset>
         {{/if}}

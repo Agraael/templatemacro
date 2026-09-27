@@ -380,6 +380,7 @@ export async function placeZone(options = {}, hooks = {})
         fillPulse,
         fillPulseSpeed,
         centerLabel,
+        laLineOfSight: true,
         ...(tmacGraphics || {})
     };
 
@@ -698,7 +699,8 @@ export async function placeDifficultTerrainZone(options = {}, movementPenalty = 
     // v13: setFlag throws if the scope module isn't active. Update raw flags instead.
         await result.template.update({
             "flags.templatemacro.movementPenalty": movementPenalty,
-            "flags.templatemacro.flatMovementPenalty": isFlatPenalty
+            "flags.templatemacro.flatMovementPenalty": isFlatPenalty,
+            "flags.templatemacro.laLineOfSight": options.tmacGraphics?.laLineOfSight === true
         });
     }
     return result;
