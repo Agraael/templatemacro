@@ -80,10 +80,19 @@ function _listTargetFilterGroups() {
       return { value: `ACTORTYPE_${t}`, label: localized === `TYPES.Actor.${t}` ? t : localized };
     })});
   }
-  // advanced teams from token-factions, only when its advanced teams are on
-  const teams = game.modules.get("token-factions")?.api?.getTeams?.() ?? [];
-  if (teams.length) {
-    groups.push({ label: "Advanced Team", options: teams.filter(team => team?.id).map(team => ({ value: `TEAM_${team.id}`, label: team.name ?? team.id })) });
+  // advanced teams from token-factions, only when "color-from" is set to advanced-factions
+  if (game.modules.get("token-factions")?.active) {
+    let useAdvanced = false;
+    try { useAdvanced = game.settings.get("token-factions", "color-from") === "advanced-factions"; }
+    catch { /* setting missing */ }
+    if (useAdvanced) {
+      let teams = [];
+      try { teams = game.settings.get("token-factions", "team-setup") ?? []; }
+      catch { /* setting missing */ }
+      if (teams.length) {
+        groups.push({ label: "Advanced Team", options: teams.filter(team => team?.id).map(team => ({ value: `TEAM_${team.id}`, label: team.name ?? team.id })) });
+      }
+    }
   }
   return { flat, groups };
 }
