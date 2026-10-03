@@ -351,7 +351,7 @@ function stopAnimation(template)
 function animationTick(template, dt)
 {
     const doc = template.document;
-    if (!doc || !shouldUseCustomRender(doc))
+    if (!doc || template.destroyed || !shouldUseCustomRender(doc))
     {
         stopAnimation(template);
         return;
@@ -395,7 +395,7 @@ function animationTick(template, dt)
         state.dashOffset = (state.dashOffset ?? 0) + config.lineDashOffsetAnimation * dt / 60;
     }
 
-    template.renderFlags.set({ refreshGrid: true });
+    highlightGridWithPattern(template);
 }
 
 function getDashOffset(templateId)
