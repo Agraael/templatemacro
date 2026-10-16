@@ -217,7 +217,7 @@ function _targetFilterMatches(filterId, targetToken, sourceToken)
     if (filterId.startsWith("TEAM_"))
     {
         const teamId = filterId.slice("TEAM_".length);
-        const tokenTeamId = targetToken.actor?.getFlag("token-factions", "team");
+        const tokenTeamId = game.modules.get("token-factions")?.api?.getTeam?.(targetToken);
         return tokenTeamId === teamId;
     }
     const disp = _resolveDisposition(targetToken, sourceToken);
