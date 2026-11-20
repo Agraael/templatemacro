@@ -9,6 +9,7 @@ import {
     _getFirstOwnerId,
     callMacro,
     renderTemplateMacroConfig,
+    syncHeldEffects,
     unregisterCallbacks
 } from "./templatemacro.mjs";
 import { terrainTopAt } from "./elevation-cull.mjs";
@@ -312,7 +313,9 @@ export function _updateTemplate(templateDoc, update, context, userId)
     if (show)
         callMacro(templateDoc, "whenRevealed", macroContext);
     if (moved)
-        callMacro(templateDoc, "whenMoved", macroContext);
+        callMacro(templateDoc, "whenMoved", macroContext).then(() => syncHeldEffects(templateDoc, macroContext));
+    if (foundry.utils.getProperty(context, `${MODULE}.fireCreated`))
+        callMacro(templateDoc, "whenCreated", macroContext);
 }
 
 export function _preUpdateCombat(combat, update, context, userId)

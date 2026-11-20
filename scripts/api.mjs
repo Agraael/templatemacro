@@ -1,6 +1,10 @@
 import { MODULE } from "./constants.mjs";
-import { callMacro, registerCallback, unregisterCallbacks } from "./templatemacro.mjs";
+import { registerCallback, unregisterCallbacks } from "./templatemacro.mjs";
 import { cellOccludedByTerrain, getTemplateElevationBand, isInElevationBand, isInsideInnerCircle, isTemplateElevationGated } from "./elevation-cull.mjs";
+
+const _occupiedCache = new Map();
+for (const hook of ["canvasReady", "canvasTearDown", "updateScene", "createMeasuredTemplate", "updateMeasuredTemplate", "deleteMeasuredTemplate"])
+    Hooks.on(hook, () => _occupiedCache.clear());
 
 /**
  * Grid offsets a template occupies (Foundry highlight rule: cell-center in shape), inner circle excluded.
@@ -13,6 +17,9 @@ export function getTemplateOccupiedOffsets(templateDoc)
     const obj = templateDoc?.object;
     if (!obj || canvas?.grid?.type === CONST.GRID_TYPES.GRIDLESS)
         return null;
+    const cached = _occupiedCache.get(templateDoc.id);
+    if (cached && cached.shape === obj.shape && cached.x === templateDoc.x && cached.y === templateDoc.y && cached.size === canvas.grid.size)
+        return cached.keys;
     let positions;
     try { positions = obj._getGridHighlightPositions?.() ?? []; }
     catch { return null; }
@@ -27,6 +34,7 @@ export function getTemplateOccupiedOffsets(templateDoc)
         const off = grid.getOffset(c);
         keys.add(`${off.i},${off.j}`);
     }
+    _occupiedCache.set(templateDoc.id, { shape: obj.shape, x: templateDoc.x, y: templateDoc.y, size: grid.size, keys });
     return keys;
 }
 
@@ -416,15 +424,8 @@ export async function placeZone(options = {}, hooks = {})
                             ...tf
                         }
                     }
-                });
+                }, { [MODULE]: { fireCreated: true } });
                 await template.update({ "flags.tokenmagic.templateData.opacity": 0 });
-
-                // Lancer placement happens before flags are stamped, so fire whenCreated by hand
-                if (flags.templatemacro?.whenCreated)
-                {
-                    const { id: gmId } = game.users.find(u => u.active && u.isGM) ?? {};
-                    callMacro(template, "whenCreated", { gmId, userId: game.user.id, coords: { previous: null, current: { x: template.x, y: template.y } } });
-                }
             }
         }
         catch (e)
@@ -507,9 +508,9 @@ export async function placeZoneWithStatusEffect(options = {}, statusEffects = []
     const ef = ${JSON.stringify(statusEffects)};
     const tid = template.id;
     const api = game.modules.get('templatemacro').api;
-    if (!template.object) {
+    if (!template.object?.shape) {
       let retries = 0;
-      while (!template.object && retries < 10) {
+      while (!template.object?.shape && retries < 10) {
         await new Promise(r => setTimeout(r, 50));
         retries++;
       }

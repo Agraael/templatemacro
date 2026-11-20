@@ -83,9 +83,10 @@ export function callMacro(templateDoc, whenWhat, context)
     {
         if (action.trigger !== whenWhat)
             continue;
-        if (!_targetFilterMatches(action.targetFilter ?? "ALL", token, sourceToken))
+        const templateScoped = action.actionType === "effect" && !context.tokenId;
+        if (!templateScoped && !_targetFilterMatches(action.targetFilter ?? "ALL", token, sourceToken))
             continue;
-        const id = action.asGM ? context.gmId : context.userId;
+        const id = templateScoped ? (context.gmId ?? context.userId) : (action.asGM ? context.gmId : context.userId);
         if (game.user.id !== id)
             continue;
         templateDoc.object?.refresh();
@@ -111,11 +112,13 @@ export function callMacro(templateDoc, whenWhat, context)
             }
             else if (action.actionType === "effect" && action.effectName)
             {
-                if (!token?.actor)
+                if (templateScoped)
                 {
                     promises.push(_applyTemplateEffect(templateDoc, scene, action, action.effectName, templateDoc.id, sourceToken));
                     continue;
                 }
+                if (!token?.actor)
+                    continue;
                 const a = token.actor;
                 const tid = templateDoc.id;
                 const sid = action.effectName;
@@ -148,7 +151,23 @@ export function callMacro(templateDoc, whenWhat, context)
     return Promise.all(promises);
 }
 
-async function _applyTemplateEffect(templateDoc, scene, action, sid, tid, sourceToken)
+export function syncHeldEffects(templateDoc, context)
+{
+    if (game.user.id !== (context.gmId ?? context.userId))
+        return Promise.resolve();
+
+    const actions = templateDoc.getFlag(MODULE, "actions") ?? [];
+    const isEffect = action => action.actionType === "effect" && action.effectName;
+    const released = new Set(actions
+        .filter(action => isEffect(action) && action.trigger === "whenLeft" && action.effectMode === "remove")
+        .map(action => action.effectName));
+    const held = actions.filter(action => isEffect(action) && action.trigger === "whenEntered" && action.effectMode !== "remove" && released.has(action.effectName));
+    const sourceToken = _resolveTemplateSourceToken(templateDoc);
+
+    return Promise.all(held.map(action => _applyTemplateEffect(templateDoc, templateDoc.parent, action, action.effectName, templateDoc.id, sourceToken, true)));
+}
+
+async function _applyTemplateEffect(templateDoc, scene, action, sid, tid, sourceToken, releaseOutside = false)
 {
     if (action.effectMode === "remove")
     {
@@ -167,8 +186,23 @@ async function _applyTemplateEffect(templateDoc, scene, action, sid, tid, source
         await new Promise(resolve => setTimeout(resolve, 50));
         retries++;
     }
+    if (!templateDoc.object?.shape)
+        return;
     const api = game.modules.get(MODULE)?.api;
     const contained = api?.findContained?.(templateDoc) ?? [];
+
+    if (releaseOutside)
+    {
+        for (const tokenDoc of scene.tokens)
+        {
+            if (contained.includes(tokenDoc.id))
+                continue;
+            const found = tokenDoc.actor?.effects.find(eff => eff.statuses.has(sid) && eff.getFlag(MODULE, "sourceTemplate") === tid);
+            if (found)
+                await tokenDoc.actor.deleteEmbeddedDocuments("ActiveEffect", [found.id]);
+        }
+    }
+
     for (const containedId of contained)
     {
         const targetToken = scene.tokens.get(containedId)?.object;

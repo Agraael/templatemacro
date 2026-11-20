@@ -64,13 +64,15 @@ export function isTemplateElevationGated(templateDoc)
 
 export function terrainTopAt(worldX, worldY)
 {
+    const lancerAutomations = game.modules.get("lancer-automations");
+    const solidTokenTop = lancerAutomations?.active ? (lancerAutomations.api?.solidTokenTopAt?.(worldX, worldY) ?? 0) : 0;
     const tht = globalThis.terrainHeightTools;
     if (!tht)
-        return 0;
+        return solidTokenTop;
     let shapes = [];
     try { shapes = tht.getShapesAtPoint?.(worldX, worldY) ?? []; }
-    catch { return 0; }
-    let topMax = 0;
+    catch { return solidTokenTop; }
+    let topMax = solidTokenTop;
     for (const s of shapes)
     {
         const typeId = s?.terrainTypeId ?? s?.terrainType?.id ?? s?.shape?.terrainTypeId ?? null;
